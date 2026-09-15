@@ -1,0 +1,55 @@
+# ===================== 构建阶段 =====================
+FROM node:24-slim AS builder
+WORKDIR /app
+
+RUN corepack enable && corepack prepare pnpm@12.4.1 --activate || npm i -g pnpm@12.4.1
+
+# 先复制清单文件，利用缓存
+COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
+COPY packages/core/package.json packages/core/
+COPY packages/db/package.json packages/db/
+COPY packages/pipeline/package.json packages/pipeline/
+COPY apps/web/package.json apps/web/
+COPY apps/worker/package.json apps/worker/
+
+RUN pnpm install --frozen-lockfile
+
+# 复制源码并构建 web（next standalone）
+COPY tsconfig.base.json ./
+COPY packages packages
+COPY apps apps
+RUN pnpm --filter @sakura/web build
+
+# ===================== 运行阶段 =====================
+FROM node:24-slim AS runner
+WORKDIR /app
+
+# ffmpeg 用于时间线合成导出
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends ffmpeg ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
+
+ENV NODE_ENV=production \
+    PORT=3000 \
+    SAKURA_DATA_DIR=/data \
+    FFMPEG_PATH=ffmpeg
+
+# standalone 产物
+COPY --from=builder /app/apps/web/.next/standalone ./
+COPY --from=builder /app/apps/web/.next/static ./apps/web/.next/static
+COPY --from=builder /app/apps/web/public ./apps/web/public
+
+# 数据库结构文件（运行时建表用）
+COPY --from=builder /app/packages/db/src/schema.sql /app/packages/db/src/schema.sql
+
+# 兜底：把 node_modules 里的 workspace 包一并带上（standalone 已包含大部分）
+COPY --from=builder /app/node_modules ./node_modules
+
+RUN mkdir -p /data
+VOLUME ["/data"]
+EXPOSE 3000
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+  CMD node -e "fetch('http://127.0.0.1:3000/api/jobs').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+
+CMD ["node", "apps/web/server.js"]

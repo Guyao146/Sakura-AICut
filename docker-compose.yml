@@ -1,0 +1,54 @@
+# =============================================================================
+# Sakura AI Cut —— 默认直接拉取 ghcr.io 上已构建好的镜像，无需本地编译。
+#
+#   docker compose up -d
+#
+# 若想从源码自行编译镜像，改用 override 文件：
+#
+#   docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+#
+# 镜像由 GitHub Actions（.github/workflows/docker.yml）在每次推送到 main
+# 或发布 Release 时自动构建并发布到 ghcr.io。
+# =============================================================================
+services:
+  web:
+    image: ghcr.io/guyao146/sakura-aicut-web:latest
+    container_name: sakura-web
+    restart: unless-stopped
+    pull_policy: missing
+    ports:
+      - '${WEB_PORT:-3000}:3000'
+    environment:
+      SAKURA_DATA_DIR: /data
+      SAKURA_SECRET: ${SAKURA_SECRET:-sakura-aicut-change-me-please-32chars}
+      APP_URL: ${APP_URL:-http://localhost:3000}
+      FFMPEG_PATH: ffmpeg
+      NODE_ENV: production
+    volumes:
+      - sakura-data:/data
+    depends_on:
+      - worker
+
+  worker:
+    image: ghcr.io/guyao146/sakura-aicut-worker:latest
+    container_name: sakura-worker
+    restart: unless-stopped
+    pull_policy: missing
+    environment:
+      SAKURA_DATA_DIR: /data
+      SAKURA_SECRET: ${SAKURA_SECRET:-sakura-aicut-change-me-please-32chars}
+      WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-3}
+      WORKER_POLL_INTERVAL: ${WORKER_POLL_INTERVAL:-1500}
+      ASYNC_TASK_TIMEOUT: ${ASYNC_TASK_TIMEOUT:-1800}
+      FFMPEG_PATH: ffmpeg
+      # 如需使用宿主机上的 Ollama / ComfyUI，保持以下映射（Linux 下用 host-gateway）
+      EXTRA_HOST: host.docker.internal
+    volumes:
+      - sakura-data:/data
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
+
+volumes:
+  sakura-data:
+    driver: local
+

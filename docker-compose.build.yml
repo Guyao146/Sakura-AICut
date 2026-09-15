@@ -1,0 +1,19 @@
+# =============================================================================
+# 本地构建 override：从源码自行编译镜像（默认 compose 文件是直接拉 ghcr.io）
+#
+#   docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+# =============================================================================
+services:
+  web:
+    image: sakura-aicut-web:local
+    pull_policy: never
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.web
+
+  worker:
+    image: sakura-aicut-worker:local
+    pull_policy: never
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.worker

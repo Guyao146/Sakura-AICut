@@ -1,0 +1,15 @@
+packages:
+  - 'apps/*'
+  - 'packages/*'
+
+# 允许执行安装脚本的依赖（pnpm 11 默认全部阻止）
+allowBuilds:
+  esbuild: true
+  sharp: true
+  unrs-resolver: true
+
+# 关闭 pnpm 12 默认的供应链策略 minimumReleaseAge（默认 24h）。
+# 本项目依赖已锁定在 pnpm-lock.yaml，且系统时钟常晚于公共 registry 的发布时间，
+# 该默认策略会持续误伤最近发布的传递依赖（如 @types/d3-selection）并阻断 install/build。
+minimumReleaseAge: 0
+

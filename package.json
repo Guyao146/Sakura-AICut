@@ -1,0 +1,28 @@
+{
+  "name": "sakura-aicut",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Sakura AI Cut - 无限画布 AI 短剧 / 电影生成与剪辑平台",
+  "license": "LGPL-2.1-only",
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "packageManager": "pnpm@12.4.1",
+  "scripts": {
+    "dev": "pnpm --filter @sakura/web --filter @sakura/worker --parallel dev",
+    "dev:web": "pnpm --filter @sakura/web dev",
+    "dev:worker": "pnpm --filter @sakura/worker dev",
+    "build": "pnpm --filter @sakura/core build && pnpm --filter @sakura/db build && pnpm --filter @sakura/web build",
+    "start:web": "pnpm --filter @sakura/web start",
+    "start:worker": "pnpm --filter @sakura/worker start",
+    "typecheck": "pnpm -r typecheck",
+    "db:migrate": "pnpm --filter @sakura/db migrate",
+    "db:reset": "pnpm --filter @sakura/db reset",
+    "docker:up": "docker compose up -d --build",
+    "docker:down": "docker compose down",
+    "docker:logs": "docker compose logs -f"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  }
+}

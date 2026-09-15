@@ -1,0 +1,24 @@
+{
+  "name": "@sakura/db",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "embed": "node scripts/embed-schema.mjs",
+    "build": "node scripts/embed-schema.mjs && tsc -p tsconfig.json --noEmit",
+    "typecheck": "node scripts/embed-schema.mjs && tsc -p tsconfig.json --noEmit",
+    "migrate": "tsx src/migrate.ts",
+    "reset": "tsx src/migrate.ts --reset"
+  },
+  "dependencies": {
+    "@sakura/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^26.5.1",
+    "tsx": "^4.23.13",
+    "typescript": "^5.9.3"
+  }
+}

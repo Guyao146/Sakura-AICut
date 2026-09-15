@@ -1,0 +1,35 @@
+# ===================== Worker 镜像 =====================
+# Worker 用 tsx 直接运行 TypeScript 源码，与 Web 共享同一份代码与数据卷
+FROM node:24-slim
+
+WORKDIR /app
+
+RUN corepack enable && corepack prepare pnpm@12.4.1 --activate || npm i -g pnpm@12.4.1
+
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends ffmpeg ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
+
+COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
+COPY packages/core/package.json packages/core/
+COPY packages/db/package.json packages/db/
+COPY packages/pipeline/package.json packages/pipeline/
+COPY apps/web/package.json apps/web/
+COPY apps/worker/package.json apps/worker/
+
+RUN pnpm install --frozen-lockfile
+
+COPY tsconfig.base.json ./
+COPY packages packages
+COPY apps/worker apps/worker
+
+ENV NODE_ENV=production \
+    SAKURA_DATA_DIR=/data \
+    FFMPEG_PATH=ffmpeg \
+    WORKER_CONCURRENCY=3
+
+RUN mkdir -p /data
+VOLUME ["/data"]
+
+WORKDIR /app/apps/worker
+CMD ["./node_modules/.bin/tsx", "src/index.ts"]

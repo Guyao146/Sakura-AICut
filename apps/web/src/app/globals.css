@@ -1,0 +1,78 @@
+@import 'tailwindcss';
+
+/* ---------- 设计变量（暗色影棚风格） ---------- */
+@theme {
+  --color-ink-900: #0b0d12;
+  --color-ink-800: #12151c;
+  --color-ink-700: #1a1e28;
+  --color-ink-600: #242a36;
+  --color-ink-500: #333b4a;
+  --color-mist-400: #8b93a7;
+  --color-mist-300: #b6bccb;
+  --color-sakura-500: #f472b6;
+  --color-sakura-400: #fb7fb8;
+  --color-neon-400: #7dd3fc;
+  --font-sans: 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-ink-900);
+  color: #e7eaf3;
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: #2b3240;
+  border-radius: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* React Flow 暗色适配 */
+.react-flow__background {
+  background-color: var(--color-ink-900);
+}
+.react-flow__attribution {
+  display: none;
+}
+
+/* 通用控件 */
+.field {
+  width: 100%;
+  background: var(--color-ink-800);
+  border: 1px solid var(--color-ink-500);
+  border-radius: 8px;
+  padding: 8px 10px;
+  color: #e7eaf3;
+  font-size: 13px;
+  outline: none;
+}
+.field:focus {
+  border-color: var(--color-sakura-500);
+}
+textarea.field {
+  resize: vertical;
+  line-height: 1.6;
+}
+label.form-label {
+  display: block;
+  font-size: 12px;
+  color: var(--color-mist-400);
+  margin-bottom: 4px;
+}

@@ -1,0 +1,91 @@
+# =============================================================================
+# Sakura AI Cut —— 镜像自动构建并发布到 GitHub Container Registry (ghcr.io)
+#
+# 触发条件：
+#   1. 推送到 main / master 分支
+#   2. 发布 Release（打 v* 标签）—— 同时打 stable 与版本号标签
+#   3. 手动触发（workflow_dispatch）
+#
+# 产物：ghcr.io/guyao146/sakura-aicut-web / sakura-aicut-worker
+# =============================================================================
+name: Build & Publish Docker Images
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - 'apps/**'
+      - 'packages/**'
+      - 'docker/**'
+      - 'docker-compose.yml'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - 'tsconfig.base.json'
+      - '.github/workflows/docker.yml'
+  release:
+    types: [published]
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: web
+            dockerfile: docker/Dockerfile.web
+            image: ghcr.io/guyao146/sakura-aicut-web
+          - target: worker
+            dockerfile: docker/Dockerfile.worker
+            image: ghcr.io/guyao146/sakura-aicut-worker
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU（多架构）
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: 登录 ghcr.io
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 提取版本标签
+        id: meta
+        shell: bash
+        run: |
+          tags="latest"
+          if [[ "${{ github.event_name }}" == "release" ]]; then
+            ver="${GITHUB_REF_NAME#v}"
+            tags="latest,stable,$ver"
+          fi
+          echo "tags=$tags" >> "$GITHUB_OUTPUT"
+          echo "发布标签：$tags"
+
+      - name: 构建并发布 ${{ matrix.target }}
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ${{ matrix.image }}:${{ steps.meta.outputs.tags }}
+          cache-from: type=gha,scope=${{ matrix.target }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.target }}
+          provenance: false
