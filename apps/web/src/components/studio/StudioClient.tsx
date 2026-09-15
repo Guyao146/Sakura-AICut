@@ -12,6 +12,8 @@ import { StepShotsPanel } from './ShotPanels';
 import { StepEditPanel } from './EditPanel';
 import { AgentPanel } from './AgentPanel';
 import { StudioCanvasBoard } from './StudioCanvas';
+import { MediaLibraryPanel } from './MediaLibraryPanel';
+import { UploadPanel } from './UploadPanel';
 import type { StudioData } from './types';
 
 /**
@@ -23,7 +25,7 @@ const STEP_ORDER = ['brief', 'script', 'assets', 'shots', 'edit'];
 export default function StudioClient({ data }: { data: StudioData }) {
   const router = useRouter();
   const [stage, setStage] = useState<string>(STEP_ORDER.includes(data.project.stage) ? data.project.stage : 'brief');
-  const [tab, setTab] = useState<'step' | 'agent'>('step');
+  const [tab, setTab] = useState<'step' | 'agent' | 'canvas'>('step');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ tone: 'ok' | 'err'; text: string } | null>(null);
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -99,6 +101,13 @@ export default function StudioClient({ data }: { data: StudioData }) {
           >
             🤖 Agent
           </Button>
+          <Button
+            size="sm"
+            variant={tab === 'canvas' ? 'primary' : 'default'}
+            onClick={() => setTab(tab === 'canvas' ? 'step' : 'canvas')}
+          >
+            📚 素材
+          </Button>
           <Button size="sm" variant="ghost" onClick={() => router.refresh()}>
             刷新
           </Button>
@@ -166,7 +175,18 @@ export default function StudioClient({ data }: { data: StudioData }) {
         </div>
 
         <aside className="w-[460px] shrink-0 overflow-y-auto border-l border-[#1c2129] bg-[#0b0d12] p-3">
-          {tab === 'agent' ? (
+          {tab === 'canvas' ? (
+            <div className="space-y-4">
+              <div>
+                <h3 className="text-xs font-medium text-slate-300 mb-2">上传素材</h3>
+                <UploadPanel projectId={data.project.id} />
+              </div>
+              <div>
+                <h3 className="text-xs font-medium text-slate-300 mb-2">项目素材</h3>
+                <MediaLibraryPanel projectId={data.project.id} media={data.media} />
+              </div>
+            </div>
+          ) : tab === 'agent' ? (
             <AgentPanel
               projectId={data.project.id}
               plan={data.plan}
