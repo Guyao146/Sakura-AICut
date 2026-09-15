@@ -162,7 +162,7 @@ export default function StudioClient({ data }: { data: StudioData }) {
         </nav>
 
         <div className="min-w-0 flex-1">
-          <StudioCanvasBoard data={data} onSelectStep={setStage} />
+          <StudioCanvasBoard data={data} />
         </div>
 
         <aside className="w-[460px] shrink-0 overflow-y-auto border-l border-[#1c2129] bg-[#0b0d12] p-3">
