@@ -6,11 +6,7 @@ import type { ReactNode } from 'react';
  */
 const NAV = [
   { href: '/', label: '项目', icon: '🎬' },
-  { href: '/settings?tab=providers', label: 'API 接入', icon: '🔌' },
-  { href: '/settings?tab=models', label: '模型路由', icon: '🧭' },
-  { href: '/settings?tab=prompts', label: '提示词库', icon: '📚' },
-  { href: '/settings?tab=camera', label: '运镜库', icon: '🎥' },
-  { href: '/settings?tab=general', label: '通用设置', icon: '⚙️' },
+  { href: '/settings', label: '设置', icon: '⚙️' },
 ];
 
 export function AppShell({ children, active }: { children: ReactNode; active?: string }) {
@@ -25,7 +21,7 @@ export function AppShell({ children, active }: { children: ReactNode; active?: s
           {NAV.map((item) => {
             const isActive =
               (item.href === '/' && (active === 'projects' || !active)) ||
-              (item.href.startsWith('/settings') && active === item.href.split('=')[1]);
+              (item.href === '/settings' && active === 'settings');
             return (
               <Link
                 key={item.href}

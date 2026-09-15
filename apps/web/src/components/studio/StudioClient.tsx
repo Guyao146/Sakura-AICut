@@ -69,9 +69,6 @@ export default function StudioClient({ data }: { data: StudioData }) {
 
   const activeJobs = jobs.filter((job) => job.status === 'running' || job.status === 'pending');
   const recentFailed = jobs.filter((job) => job.status === 'failed').slice(0, 2);
-  const routeHint = data.routes.routes
-    .map((route) => `${route.capability}→${route.providerName}/${route.modelId}`)
-    .join('　');
 
   return (
     <div className="flex h-screen flex-col">
@@ -89,9 +86,12 @@ export default function StudioClient({ data }: { data: StudioData }) {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <div className="hidden max-w-[360px] truncate text-[11px] text-slate-500 xl:block">
-            {routeHint || '尚未配置模型路由'}
-          </div>
+          <Link
+            href="/settings?tab=models"
+            className="hidden rounded-lg border border-[#2b3240] px-2.5 py-1 text-[11px] text-slate-400 transition-colors hover:border-pink-400/40 hover:text-slate-200 xl:inline-block"
+          >
+            模型路由 →
+          </Link>
           <Button
             size="sm"
             variant={tab === 'agent' ? 'primary' : 'default'}

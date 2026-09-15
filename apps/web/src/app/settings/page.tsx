@@ -2,9 +2,12 @@ import { bootstrap, getAppSettings, listCustomCameraMoves, listPromptTemplates }
 import { AppShell, PageHeader } from '@/components/AppShell';
 import { SettingsClient } from '@/components/settings/SettingsClient';
 import { connectedRoutesSummary } from '@/lib/server/ai';
+import { Badge } from '@/components/ui';
+import packageJson from '../../../package.json';
 
 /**
  * 设置页：API 接入 / 模型路由 / 提示词库 / 运镜库 / 通用设置
+ * 所有全局设置集中在此，不在主导航铺开。
  */
 export const dynamic = 'force-dynamic';
 
@@ -18,10 +21,11 @@ export default async function SettingsPage({
   const summary = connectedRoutesSummary();
 
   return (
-    <AppShell active={tab ?? 'providers'}>
+    <AppShell active="settings">
       <PageHeader
         title="设置"
         subtitle="接入模型供应商（NewAPI / OneAPI / 火山引擎 / 可灵 / MiniMax / 百炼 …）、配置能力路由、管理提示词与运镜模板"
+        extra={<Badge tone="pink">v{packageJson.version}</Badge>}
       />
       <SettingsClient
         data={{
