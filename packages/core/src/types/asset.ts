@@ -53,6 +53,43 @@ export interface MediaFile extends Timestamps {
   isFavorite?: boolean;
 }
 
+/**
+ * 无限画布上的素材项（RunningHub / LibTV 式自由画布）
+ *
+ * 与五步流程无关：这里是素材的二维空间编排。
+ * 用户可以把文字、图片、视频、语音任意拖放到画布上，自由缩放与排列。
+ */
+export type CanvasItemKind = 'text' | 'image' | 'video' | 'audio';
+
+export const CANVAS_ITEM_KIND_LABELS: Record<CanvasItemKind, string> = {
+  text: '文字',
+  image: '图片',
+  video: '视频',
+  audio: '语音',
+};
+
+export interface CanvasItem extends Timestamps {
+  id: ID;
+  projectId: ID;
+  kind: CanvasItemKind;
+  /** 图片 / 视频 / 语音关联的媒体记录（kind=text 时为空） */
+  mediaId?: ID | null;
+  /** 媒体可访问 URL（冗余存储，避免前端再查 media 表） */
+  url?: string | null;
+  /** 文字内容或素材标题 */
+  text: string;
+  /** 画布坐标 */
+  x: number;
+  y: number;
+  /** 宽高（0 表示自适应） */
+  width: number;
+  height: number;
+  /** 层级 */
+  z: number;
+  /** 旋转角度（度） */
+  rotation?: number;
+}
+
 export interface Asset extends Timestamps {
   id: ID;
   projectId: ID;

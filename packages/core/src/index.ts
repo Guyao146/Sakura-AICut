@@ -16,6 +16,8 @@ export * from './types/job';
 export * from './types/agent';
 export * from './types/prompt';
 
+// DB 不导出 CreateCanvasItemInput，由 db 仓储包导出
+
 // 工具
 export * from './utils/id';
 export * from './utils/text';

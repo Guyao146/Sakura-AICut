@@ -283,6 +283,26 @@ CREATE TABLE IF NOT EXISTS chat_messages (
 );
 CREATE INDEX IF NOT EXISTS idx_chat_project ON chat_messages(project_id, scope, created_at);
 
+-- 画布素材（无限画布上的文字 / 图片 / 视频 / 语音）
+CREATE TABLE IF NOT EXISTS canvas_items (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  media_id TEXT,
+  url TEXT,
+  text TEXT NOT NULL DEFAULT '',
+  x REAL NOT NULL DEFAULT 0,
+  y REAL NOT NULL DEFAULT 0,
+  width REAL NOT NULL DEFAULT 0,
+  height REAL NOT NULL DEFAULT 0,
+  z INTEGER NOT NULL DEFAULT 0,
+  rotation REAL NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_canvas_project ON canvas_items(project_id, z, created_at);
+
 -- 全局设置（键值）
 CREATE TABLE IF NOT EXISTS settings (
   key TEXT PRIMARY KEY,

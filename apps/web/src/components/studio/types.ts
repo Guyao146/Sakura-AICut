@@ -2,6 +2,7 @@ import type {
   AgentChatTurn,
   AgentPlan,
   Asset,
+  CanvasItem,
   MediaFile,
   Project,
   PromptTemplate,
@@ -22,6 +23,7 @@ export interface StudioData {
   shots: Shot[];
   timeline: Timeline | null;
   media: Record<string, MediaFile>;
+  canvasItems: CanvasItem[];
   chat: Array<{ id: string; role: string; content: string; createdAt: string }>;
   promptTemplates: PromptTemplate[];
   customCameraMoves: CameraMoveTemplate[];
@@ -33,3 +35,4 @@ export interface StudioData {
     routes: Array<{ capability: string; providerId: string; providerName: string; modelId: string }>;
   };
 }
+

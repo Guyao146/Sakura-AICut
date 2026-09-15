@@ -8,6 +8,7 @@ export * from './repos/shots';
 export * from './repos/system';
 export * from './repos/jobs';
 export * from './repos/agent';
+export * from './repos/canvas';
 export * from './snapshot';
 
 import { getProjectWithContent } from './snapshot';
