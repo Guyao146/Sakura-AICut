@@ -183,7 +183,7 @@ export default function StudioClient({ data }: { data: StudioData }) {
               </div>
               <div>
                 <h3 className="text-xs font-medium text-slate-300 mb-2">项目素材</h3>
-                <MediaLibraryPanel projectId={data.project.id} media={data.media} />
+                <MediaLibraryPanel projectId={data.project.id} media={data.media} canvasItemCount={data.canvasItems.length} />
               </div>
             </div>
           ) : tab === 'agent' ? (

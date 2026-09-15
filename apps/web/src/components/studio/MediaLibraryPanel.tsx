@@ -1,20 +1,31 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback } from 'react';
 import clsx from 'clsx';
-import { Badge, Button, Empty } from '@/components/ui';
+import { Badge, Button, Empty, Field, Input, Select } from '@/components/ui';
 import type { MediaFile } from '@sakura/core';
 import { createCanvasItemAction } from '@/app/actions/canvas';
+import { exportCanvasAsTimelineAction } from '@/app/actions/export-canvas';
 
 interface MediaLibraryPanelProps {
   projectId: string;
   media: Record<string, MediaFile>;
+  canvasItemCount?: number;
   onItemAdded?: (itemId: string) => void;
+  onExporting?: (jobId: string) => void;
 }
 
-export function MediaLibraryPanel({ projectId, media, onItemAdded }: MediaLibraryPanelProps) {
+export function MediaLibraryPanel({
+  projectId,
+  media,
+  canvasItemCount = 0,
+  onItemAdded,
+  onExporting,
+}: MediaLibraryPanelProps) {
   const [filter, setFilter] = useState<'all' | 'image' | 'video' | 'audio'>('all');
   const [loading, setLoading] = useState(false);
+  const [duration, setDuration] = useState(10);
+  const [showExportPanel, setShowExportPanel] = useState(false);
 
   const items = Object.values(media).filter((m) => {
     if (filter === 'all') return true;
@@ -46,8 +57,67 @@ export function MediaLibraryPanel({ projectId, media, onItemAdded }: MediaLibrar
     [projectId, onItemAdded],
   );
 
+  const handleExport = async () => {
+    setLoading(true);
+    try {
+      const result = await exportCanvasAsTimelineAction(projectId, { duration });
+      if (result.ok && result.jobId) {
+        onExporting?.(result.jobId);
+        setShowExportPanel(false);
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="space-y-3">
+      {canvasItemCount > 0 && (
+        <Button
+          variant="primary"
+          className="w-full"
+          loading={loading}
+          onClick={() => setShowExportPanel(!showExportPanel)}
+          size="sm"
+        >
+          🎬 导出为视频
+        </Button>
+      )}
+
+      {showExportPanel && (
+        <div className="rounded-lg border border-pink-400/40 bg-pink-500/10 p-3 space-y-2">
+          <Field label="视频时长（秒）">
+            <Input
+              type="number"
+              min="1"
+              max="300"
+              value={duration}
+              onChange={(e) => setDuration(Number(e.target.value))}
+              className="text-sm"
+            />
+          </Field>
+          <div className="flex gap-2">
+            <Button
+              variant="primary"
+              className="flex-1"
+              loading={loading}
+              onClick={handleExport}
+              size="sm"
+            >
+              导出
+            </Button>
+            <Button
+              variant="default"
+              className="flex-1"
+              onClick={() => setShowExportPanel(false)}
+              size="sm"
+            >
+              取消
+            </Button>
+          </div>
+        </div>
+      )}
+
       <div className="flex gap-1.5">
         {(['all', 'image', 'video', 'audio'] as const).map((kind) => (
           <button
@@ -68,7 +138,7 @@ export function MediaLibraryPanel({ projectId, media, onItemAdded }: MediaLibrar
       {items.length === 0 ? (
         <Empty text={filter === 'all' ? '项目暂无素材' : `暂无${filter === 'image' ? '图片' : filter === 'video' ? '视频' : '语音'}`} />
       ) : (
-        <div className="grid grid-cols-2 gap-2 max-h-[400px] overflow-y-auto">
+        <div className="grid grid-cols-2 gap-2 max-h-[300px] overflow-y-auto">
           {items.map((item) => (
             <div
               key={item.id}
@@ -105,3 +175,4 @@ export function MediaLibraryPanel({ projectId, media, onItemAdded }: MediaLibrar
     </div>
   );
 }
+

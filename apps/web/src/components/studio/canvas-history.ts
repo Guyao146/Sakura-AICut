@@ -2,7 +2,9 @@
  * 画布编辑历史管理
  */
 
-type CanvasAction =
+import type { CanvasItem } from '@sakura/core';
+
+export type CanvasAction =
   | { type: 'ITEMS_LOADED'; items: CanvasItem[] }
   | { type: 'ITEM_ADDED'; item: CanvasItem }
   | { type: 'ITEM_UPDATED'; id: string; patch: Partial<CanvasItem> }
@@ -10,7 +12,7 @@ type CanvasAction =
   | { type: 'ITEM_MOVED'; id: string; x: number; y: number }
   | { type: 'BATCH_UPDATE'; updates: Array<{ id: string; patch: Partial<CanvasItem> }> };
 
-interface CanvasState {
+export interface CanvasState {
   items: CanvasItem[];
   history: CanvasItem[][];
   historyIndex: number;
