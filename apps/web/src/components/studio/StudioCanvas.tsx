@@ -193,7 +193,14 @@ function CanvasInner({ data, projectId }: { data: StudioData; projectId: string 
 
   const handleNodesChange = useCallback((changes: NodeChange[]) => {
     for (const change of changes) {
-      if (change.type === 'remove') {
+      if (change.type === 'position' && change.position) {
+        const itemId = change.id;
+        setItems((prev) =>
+          prev.map((it) =>
+            it.id === itemId ? { ...it, x: change.position!.x, y: change.position!.y } : it,
+          ),
+        );
+      } else if (change.type === 'remove') {
         const nodeId = change.id;
         setItems((prev) => prev.filter((it) => it.id !== nodeId));
         deleteCanvasItemAction(nodeId).catch(console.error);
