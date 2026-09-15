@@ -203,7 +203,18 @@ function CanvasInner({ data, projectId }: { data: StudioData; projectId: string 
 
   return (
     <div className="relative size-full bg-[#0e1116]" onDoubleClick={handlePaneDoubleClick} onContextMenu={handlePaneRightClick}>
-      <ReactFlow nodes={nodes} edges={[]} fitView={false} minZoom={0.1} maxZoom={3} deleteKeyCode={['Backspace', 'Delete']} nodeTypes={{ default: CanvasItemNode as any }} onSelectionChange={(selection) => { setSelectedId(selection.nodes.length > 0 ? selection.nodes[0]!.id : null); }} onNodesChange={handleNodesChange}>
+      <ReactFlow 
+        nodes={nodes} 
+        edges={[]} 
+        fitView={false} 
+        minZoom={0.1} 
+        maxZoom={3} 
+        deleteKeyCode={['Backspace', 'Delete']} 
+        nodeTypes={{ default: CanvasItemNode as any }} 
+        onSelectionChange={(selection) => { setSelectedId(selection.nodes.length > 0 ? selection.nodes[0]!.id : null); }} 
+        onNodesChange={handleNodesChange}
+        onNodeDragStop={(_, node) => { updateCanvasItemAction(node.id, { x: node.position.x, y: node.position.y }).catch(console.error); }}
+      >
         <Background gap={20} color="#1f252f" size={1} />
         <Controls className="!bg-[#12151c] !text-slate-300" showInteractive={false} />
       </ReactFlow>
