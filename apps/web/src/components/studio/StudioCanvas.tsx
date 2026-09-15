@@ -193,14 +193,8 @@ function CanvasInner({ data, projectId }: { data: StudioData; projectId: string 
 
   const handleNodesChange = useCallback((changes: NodeChange[]) => {
     for (const change of changes) {
-      if (change.type === 'position' && change.position) {
-        const itemId = change.id;
-        setItems((prev) =>
-          prev.map((it) =>
-            it.id === itemId ? { ...it, x: change.position!.x, y: change.position!.y } : it,
-          ),
-        );
-      } else if (change.type === 'remove') {
+      // 删除 position 处理 - 避免频繁更新导致闪烁
+      if (change.type === 'remove') {
         const nodeId = change.id;
         setItems((prev) => prev.filter((it) => it.id !== nodeId));
         deleteCanvasItemAction(nodeId).catch(console.error);
@@ -220,7 +214,10 @@ function CanvasInner({ data, projectId }: { data: StudioData; projectId: string 
         nodeTypes={{ default: CanvasItemNode as any }} 
         onSelectionChange={(selection) => { setSelectedId(selection.nodes.length > 0 ? selection.nodes[0]!.id : null); }} 
         onNodesChange={handleNodesChange}
-        onNodeDragStop={(_, node) => { updateCanvasItemAction(node.id, { x: node.position.x, y: node.position.y }).catch(console.error); }}
+        onNodeDragStop={(_, node) => {
+          setItems((prev) => prev.map((it) => (it.id === node.id ? { ...it, x: node.position.x, y: node.position.y } : it)));
+          updateCanvasItemAction(node.id, { x: node.position.x, y: node.position.y }).catch(console.error);
+        }}
       >
         <Background gap={20} color="#1f252f" size={1} />
         <Controls className="!bg-[#12151c] !text-slate-300" showInteractive={false} />
