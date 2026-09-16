@@ -142,7 +142,15 @@ export function MediaLibraryPanel({
           {items.map((item) => (
             <div
               key={item.id}
-              className="group relative rounded-lg border border-[#333b4a] bg-[#12151c] overflow-hidden hover:border-pink-400/40 transition-colors cursor-pointer"
+              draggable
+              onDragStart={(e) => {
+                e.dataTransfer.setData(
+                  'application/json',
+                  JSON.stringify({ kind: item.kind, url: item.url, name: item.prompt || item.url?.split('/').pop() || '素材' }),
+                );
+                e.dataTransfer.effectAllowed = 'copy';
+              }}
+              className="group relative rounded-lg border border-[#333b4a] bg-[#12151c] overflow-hidden hover:border-pink-400/40 transition-colors cursor-pointer active:cursor-grabbing"
               onClick={() => void handleAddToCanvas(item)}
             >
               {item.kind === 'image' && (
