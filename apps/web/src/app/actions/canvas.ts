@@ -22,7 +22,7 @@ import {
   removeItemFromGroup,
   mapItemGroups,
 } from '@sakura/db';
-import type { CanvasItem, CanvasEdge, CanvasGroup } from '@sakura/core';
+import type { CanvasItem, CanvasEdge, CanvasGroup, CanvasItemKind } from '@sakura/core';
 import { CANVAS_TEMPLATES } from '@sakura/core';
 import type { ActionResult } from './project';
 
@@ -327,6 +327,55 @@ export async function importShotsToCanvasAction(
     });
     for (let i = 0; i < created.length - 1; i++) {
       createCanvasEdge(projectId, created[i]!.id, created[i + 1]!.id);
+    }
+    refresh(projectId);
+    return { ok: true, data: created };
+  } catch (error) {
+    return toError(error);
+  }
+}
+
+/** 导入画布快照 JSON：批量还原素材布局与连线 */
+export async function importCanvasJsonAction(
+  projectId: string,
+  snapshot: {
+    items: Array<{
+      kind: string;
+      text?: string;
+      url?: string | null;
+      x?: number;
+      y?: number;
+      width?: number;
+      height?: number;
+    }>;
+    edges?: Array<[number, number]>;
+  },
+): Promise<ActionResult<CanvasItem[]>> {
+  try {
+    if (!snapshot?.items?.length) throw new Error('快照中没有素材');
+    const created: CanvasItem[] = [];
+    for (const node of snapshot.items) {
+      const kind = (['text', 'image', 'video', 'audio'].includes(node.kind) ? node.kind : 'text') as CanvasItemKind;
+      const item = createCanvasItem({
+        projectId,
+        kind,
+        text: node.text ?? '',
+        url: node.url ?? null,
+        x: node.x ?? Math.random() * 400,
+        y: node.y ?? Math.random() * 400,
+        width: node.width,
+        height: node.height,
+        z: 1,
+      });
+      created.push(item);
+    }
+    // 按下标重建连线
+    if (snapshot.edges) {
+      for (const [sourceIdx, targetIdx] of snapshot.edges) {
+        const source = created[sourceIdx];
+        const target = created[targetIdx];
+        if (source && target) createCanvasEdge(projectId, source.id, target.id);
+      }
     }
     refresh(projectId);
     return { ok: true, data: created };

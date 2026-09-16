@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Background,
   Controls,
@@ -35,7 +35,9 @@ import {
   autoLayoutCanvasAction,
   applyCanvasTemplateAction,
   importShotsToCanvasAction,
+  importCanvasJsonAction,
 } from '@/app/actions/canvas';
+import { CanvasInspector } from './CanvasInspector';
 import type { CanvasItem, CanvasGroup } from '@sakura/core';
 import { CANVAS_ITEM_KIND_LABELS, CANVAS_TEMPLATES } from '@sakura/core';
 
@@ -163,7 +165,7 @@ function CanvasInner({ data, projectId }: { data: StudioData; projectId: string 
   const [items, setItems] = useState<CanvasItem[]>(data.canvasItems);
   const [groups, setGroups] = useState<CanvasGroup[]>(data.canvasGroups);
   const [itemGroups, setItemGroups] = useState<Record<string, string>>(data.itemGroups);
-  const { screenToFlowPosition, fitView } = useReactFlow();
+  const { screenToFlowPosition, fitView, setCenter } = useReactFlow();
 
   const buildNodes = useCallback(
     (): Node[] =>
@@ -342,6 +344,203 @@ function CanvasInner({ data, projectId }: { data: StudioData; projectId: string 
       setItems((prev) => [...prev, ...result.data!]);
     }
   }, [projectId, data.shots, data.media]);
+
+  /* ------------------------------ 对齐 / 分布 ------------------------------ */
+
+  // 把选中节点同步到目标位置（同时更新本地 items 与数据库）
+  const applyPositions = useCallback(
+    (updates: Array<{ id: string; x: number; y: number }>) => {
+      // 乐观更新 ReactFlow 节点位置
+      setRfNodes((prev) =>
+        prev.map((node) => {
+          const u = updates.find((it) => it.id === node.id);
+          return u ? { ...node, position: { x: u.x, y: u.y } } : node;
+        }),
+      );
+      // 更新本地 items
+      setItems((prev) =>
+        prev.map((it) => {
+          const u = updates.find((x) => x.id === it.id);
+          return u ? { ...it, x: u.x, y: u.y } : it;
+        }),
+      );
+      // 持久化
+      for (const u of updates) {
+        updateCanvasItemAction(u.id, { x: u.x, y: u.y }).catch(console.error);
+      }
+    },
+    [setRfNodes],
+  );
+
+  const getSelectedItems = useCallback(() => items.filter((it) => selectedIds.includes(it.id)), [items, selectedIds]);
+
+  const alignLeft = useCallback(() => {
+    const sel = getSelectedItems();
+    if (sel.length < 2) return;
+    const minX = Math.min(...sel.map((it) => it.x));
+    applyPositions(sel.map((it) => ({ id: it.id, x: minX, y: it.y })));
+  }, [getSelectedItems, applyPositions]);
+
+  const alignTop = useCallback(() => {
+    const sel = getSelectedItems();
+    if (sel.length < 2) return;
+    const minY = Math.min(...sel.map((it) => it.y));
+    applyPositions(sel.map((it) => ({ id: it.id, x: it.x, y: minY })));
+  }, [getSelectedItems, applyPositions]);
+
+  const distributeH = useCallback(() => {
+    const sel = [...getSelectedItems()].sort((a, b) => a.x - b.x);
+    if (sel.length < 3) return;
+    const first = sel[0]!;
+    const last = sel[sel.length - 1]!;
+    const totalW = sel.reduce((sum, it) => sum + Math.max(80, it.width), 0);
+    const gap = (last.x + last.width - first.x - totalW) / (sel.length - 1);
+    let cursor = first.x;
+    applyPositions(sel.map((it) => {
+      const pos = { id: it.id, x: Math.round(cursor), y: it.y };
+      cursor += Math.max(80, it.width) + gap;
+      return pos;
+    }));
+  }, [getSelectedItems, applyPositions]);
+
+  const distributeV = useCallback(() => {
+    const sel = [...getSelectedItems()].sort((a, b) => a.y - b.y);
+    if (sel.length < 3) return;
+    const first = sel[0]!;
+    const last = sel[sel.length - 1]!;
+    const totalH = sel.reduce((sum, it) => sum + Math.max(60, it.height), 0);
+    const gap = (last.y + last.height - first.y - totalH) / (sel.length - 1);
+    let cursor = first.y;
+    applyPositions(sel.map((it) => {
+      const pos = { id: it.id, x: it.x, y: Math.round(cursor) };
+      cursor += Math.max(60, it.height) + gap;
+      return pos;
+    }));
+  }, [getSelectedItems, applyPositions]);
+
+  /* ------------------------------ 画布锁定 & 搜索 ------------------------------ */
+
+  const [locked, setLocked] = useState(false);
+  const [search, setSearch] = useState('');
+
+  const matchSet = useMemo(() => {
+    if (!search.trim()) return null;
+    const q = search.trim().toLowerCase();
+    return new Set(
+      items
+        .filter((it) => (it.text || '').toLowerCase().includes(q) || it.kind.toLowerCase().includes(q))
+        .map((it) => it.id),
+    );
+  }, [items, search]);
+
+  // 搜索时非匹配节点淡化
+  const visibleNodes = useMemo(() => {
+    if (!matchSet) return allNodes;
+    return allNodes.map((node) =>
+      matchSet.has(node.id) ? node : { ...node, style: { ...node.style, opacity: 0.15 } },
+    );
+  }, [allNodes, matchSet]);
+
+  /* ------------------------------ 画布快照导出/导入 ------------------------------ */
+
+  /* ------------------------------ 节点详情抽屉 ------------------------------ */
+
+  // 单选时显示 Inspector；多选时隐藏
+  const inspectorItem = selectedIds.length === 1 ? items.find((it) => it.id === selectedIds[0]) ?? null : null;
+
+  const handleFocusItem = useCallback(() => {
+    if (!inspectorItem) return;
+    setCenter(inspectorItem.x + (inspectorItem.width || 200) / 2, inspectorItem.y + (inspectorItem.height || 120) / 2, {
+      zoom: 1,
+      duration: 400,
+    });
+  }, [inspectorItem, setCenter]);
+
+  const handleInspectorUpdate = useCallback(
+    async (patch: Partial<CanvasItem>) => {
+      if (!inspectorItem) return;
+      const result = await updateCanvasItemAction(inspectorItem.id, patch);
+      if (result.ok && result.data) {
+        setItems((prev) => prev.map((it) => (it.id === inspectorItem.id ? result.data! : it)));
+      }
+    },
+    [inspectorItem],
+  );
+
+  const handleInspectorDelete = useCallback(async () => {
+    if (!inspectorItem) return;
+    const target = inspectorItem;
+    setSelectedIds([]);
+    setItems((prev) => prev.filter((it) => it.id !== target.id));
+    setRfNodes((prev) => prev.filter((n) => n.id !== target.id));
+    await deleteCanvasItemAction(target.id).catch(console.error);
+  }, [inspectorItem, setRfNodes]);
+
+  const handleInspectorFront = useCallback(async () => {
+    if (!inspectorItem) return;
+    const result = await bringCanvasItemToFrontAction(inspectorItem.id);
+    if (result.ok && result.data) {
+      setItems((prev) => prev.map((it) => (it.id === inspectorItem.id ? result.data! : it)).sort((a, b) => a.z - b.z));
+    }
+  }, [inspectorItem]);
+
+  const handleExportJson = useCallback(() => {
+    // 连线用 items 数组下标存储，导入时可跨项目还原
+    const indexById = new Map(items.map((it, idx) => [it.id, idx]));
+    const snapshot = {
+      version: 1,
+      projectId,
+      exportedAt: new Date().toISOString(),
+      items: items.map((it) => ({
+        kind: it.kind,
+        text: it.text,
+        url: it.url,
+        x: it.x,
+        y: it.y,
+        width: it.width,
+        height: it.height,
+      })),
+      edges: data.canvasEdges
+        .map((e) => [indexById.get(e.sourceId), indexById.get(e.targetId)])
+        .filter(([s, t]) => s !== undefined && t !== undefined),
+    };
+    const blob = new Blob([JSON.stringify(snapshot, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `canvas-${projectId}-${Date.now()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [projectId, items, data.canvasEdges]);
+
+  // 导入画布快照 JSON
+  const importInputRef = useRef<HTMLInputElement>(null);
+  const handleImportJson = useCallback(() => {
+    importInputRef.current?.click();
+  }, []);
+
+  const handleImportFile = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      try {
+        const text = await file.text();
+        const snapshot = JSON.parse(text);
+        const result = await importCanvasJsonAction(projectId, snapshot);
+        if (result.ok && result.data) {
+          setItems((prev) => [...prev, ...result.data!]);
+        } else {
+          alert(result.error ?? '导入失败：JSON 格式不正确');
+        }
+      } catch {
+        alert('导入失败：无法解析该 JSON 文件');
+      }
+      // 重置 input 以便重复导入同一文件
+      e.target.value = '';
+    },
+    [projectId],
+  );
+
   const handleGroupSelected = useCallback(async () => {
     if (selectedIds.length < 2) {
       alert('请先框选（Ctrl+拖拽）至少 2 个素材再成组');
@@ -469,9 +668,14 @@ function CanvasInner({ data, projectId }: { data: StudioData; projectId: string 
       onDrop={handleDrop}
     >
       <ReactFlow
-        nodes={allNodes}
+        nodes={visibleNodes}
         edges={rfEdges}
         fitView={false}
+        nodesDraggable={!locked}
+        nodesConnectable={!locked}
+        elementsSelectable={!locked}
+        zoomOnScroll={!locked}
+        panOnScroll={!locked}
         minZoom={0.1}
         maxZoom={3}
         snapToGrid
@@ -512,44 +716,123 @@ function CanvasInner({ data, projectId }: { data: StudioData; projectId: string 
       </ReactFlow>
 
       {/* 画布工具栏 */}
-      <div className="absolute left-3 top-3 z-20 flex flex-wrap gap-1.5 rounded-xl border border-[#333b4a] bg-[#12151c]/90 p-1.5 backdrop-blur">
-        <button
-          type="button"
-          onClick={() => void handleGroupSelected()}
-          disabled={selectedIds.length < 2}
-          className="rounded-lg px-2.5 py-1 text-[11px] text-slate-300 transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
-          title="框选多个素材后打包成场景卡片"
-        >
-          🎬 成组{selectedIds.length > 1 ? ` (${selectedIds.length})` : ''}
-        </button>
-        <button
-          type="button"
-          onClick={() => void handleAutoLayout()}
-          className="rounded-lg px-2.5 py-1 text-[11px] text-slate-300 transition-colors hover:bg-white/10"
-        >
-          ✨ 一键整理
-        </button>
-        <button
-          type="button"
-          onClick={() => void handleImportShots()}
-          className="rounded-lg px-2.5 py-1 text-[11px] text-slate-300 transition-colors hover:bg-white/10"
-          title="把第四步的分镜批量铺到画布"
-        >
-          🎞 导入分镜
-        </button>
-        <div className="mx-0.5 w-px bg-[#333b4a]" />
-        {CANVAS_TEMPLATES.map((template) => (
+      <div className="absolute left-3 top-3 z-20 flex flex-col gap-1.5 rounded-xl border border-[#333b4a] bg-[#12151c]/90 p-1.5 backdrop-blur">
+        <div className="flex flex-wrap gap-1.5">
           <button
-            key={template.id}
             type="button"
-            onClick={() => void handleApplyTemplate(template.id)}
-            title={template.description}
-            className="rounded-lg px-2.5 py-1 text-[11px] text-pink-300/90 transition-colors hover:bg-pink-500/10"
+            onClick={() => void handleGroupSelected()}
+            disabled={selectedIds.length < 2 || locked}
+            className="rounded-lg px-2.5 py-1 text-[11px] text-slate-300 transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
+            title="框选多个素材后打包成场景卡片"
           >
-            📐 {template.name}
+            🎬 成组{selectedIds.length > 1 ? ` (${selectedIds.length})` : ''}
           </button>
-        ))}
+          <button
+            type="button"
+            onClick={() => void handleAutoLayout()}
+            disabled={locked}
+            className="rounded-lg px-2.5 py-1 text-[11px] text-slate-300 transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            ✨ 一键整理
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleImportShots()}
+            disabled={locked}
+            className="rounded-lg px-2.5 py-1 text-[11px] text-slate-300 transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
+            title="把第四步的分镜批量铺到画布"
+          >
+            🎞 导入分镜
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleExportJson()}
+            className="rounded-lg px-2.5 py-1 text-[11px] text-slate-300 transition-colors hover:bg-white/10"
+            title="导出画布布局为 JSON 备份"
+          >
+            ⬇ 导出布局
+          </button>
+          <button
+            type="button"
+            onClick={handleImportJson}
+            disabled={locked}
+            className="rounded-lg px-2.5 py-1 text-[11px] text-slate-300 transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
+            title="从 JSON 快照恢复布局"
+          >
+            ⬆ 导入布局
+          </button>
+          <div className="mx-0.5 w-px bg-[#333b4a]" />
+          {CANVAS_TEMPLATES.map((template) => (
+            <button
+              key={template.id}
+              type="button"
+              onClick={() => void handleApplyTemplate(template.id)}
+              disabled={locked}
+              title={template.description}
+              className="rounded-lg px-2.5 py-1 text-[11px] text-pink-300/90 transition-colors hover:bg-pink-500/10 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              📐 {template.name}
+            </button>
+          ))}
+        </div>
+        {/* 第二行：对齐分布 + 锁定 + 搜索 */}
+        <div className="flex flex-wrap items-center gap-1.5">
+          {selectedIds.length >= 2 ? (
+            <>
+              <span className="text-[10px] text-slate-500">{selectedIds.length} 项</span>
+              <button type="button" onClick={alignLeft} title="左对齐" className="rounded-lg px-2 py-1 text-[11px] text-slate-300 transition-colors hover:bg-white/10">⇤ 左</button>
+              <button type="button" onClick={alignTop} title="顶对齐" className="rounded-lg px-2 py-1 text-[11px] text-slate-300 transition-colors hover:bg-white/10">⤒ 顶</button>
+              <button type="button" onClick={distributeH} disabled={selectedIds.length < 3} title="水平均匀分布（≥3 项）" className="rounded-lg px-2 py-1 text-[11px] text-slate-300 transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40">⇹ 水平分布</button>
+              <button type="button" onClick={distributeV} disabled={selectedIds.length < 3} title="垂直均匀分布（≥3 项）" className="rounded-lg px-2 py-1 text-[11px] text-slate-300 transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40">⇶ 垂直分布</button>
+              <div className="mx-0.5 w-px bg-[#333b4a]" />
+            </>
+          ) : null}
+          <button
+            type="button"
+            onClick={() => setLocked((v) => !v)}
+            className={clsx(
+              'rounded-lg px-2.5 py-1 text-[11px] transition-colors',
+              locked ? 'bg-amber-500/20 text-amber-300 hover:bg-amber-500/30' : 'text-slate-300 hover:bg-white/10',
+            )}
+            title={locked ? '画布已锁定（只读），点击解锁' : '锁定画布（防误操作）'}
+          >
+            {locked ? '🔒 已锁定' : '🔓 锁定'}
+          </button>
+          <input
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="🔍 搜索素材…"
+            className="w-32 rounded-lg border border-[#333b4a] bg-[#0e1116] px-2 py-1 text-[11px] text-slate-200 placeholder:text-slate-600 focus:border-pink-400/40 focus:outline-none"
+          />
+        </div>
       </div>
+
+      {locked && (
+        <div className="pointer-events-none absolute inset-x-0 bottom-4 z-20 flex justify-center">
+          <span className="rounded-full bg-amber-500/15 px-4 py-1 text-[11px] text-amber-300 backdrop-blur">
+            🔒 画布已锁定 — 只读模式，点击工具栏「已锁定」解锁
+          </span>
+        </div>
+      )}
+
+      <CanvasInspector
+        item={inspectorItem}
+        groupName={inspectorItem ? (groups.find((g) => g.id === itemGroups[inspectorItem.id])?.name ?? null) : null}
+        onClose={() => setSelectedIds([])}
+        onUpdate={handleInspectorUpdate}
+        onDelete={handleInspectorDelete}
+        onBringToFront={handleInspectorFront}
+        onFocus={handleFocusItem}
+      />
+
+      <input
+        ref={importInputRef}
+        type="file"
+        accept="application/json,.json"
+        className="hidden"
+        onChange={(e) => void handleImportFile(e)}
+      />
 
       {items.length === 0 && (<div className="absolute inset-0 flex items-center justify-center pointer-events-none"><Empty text="无限画布为空。双击或右键添加素材。" /></div>)}
     </div>
