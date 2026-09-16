@@ -28,21 +28,31 @@ import {
   updateCanvasItemAction,
   deleteCanvasItemAction,
   bringCanvasItemToFrontAction,
+  createCanvasEdgeAction,
+  deleteCanvasEdgeAction,
+  groupItemsAction,
+  ungroupItemsAction,
+  autoLayoutCanvasAction,
+  applyCanvasTemplateAction,
+  importShotsToCanvasAction,
 } from '@/app/actions/canvas';
-import type { CanvasItem } from '@sakura/core';
-import { CANVAS_ITEM_KIND_LABELS } from '@sakura/core';
+import type { CanvasItem, CanvasGroup } from '@sakura/core';
+import { CANVAS_ITEM_KIND_LABELS, CANVAS_TEMPLATES } from '@sakura/core';
 
 type CanvasItemKind = 'text' | 'image' | 'video' | 'audio';
 
 interface CanvasItemNodeData {
   item: CanvasItem;
+  groupId?: string | null;
   onUpdate: (patch: Partial<CanvasItem>) => Promise<void>;
   onDelete: () => Promise<void>;
   onBringToFront: () => Promise<void>;
+  onGroup?: () => void;
+  onUngroup?: () => void;
 }
 
 function CanvasItemNode({ data, selected }: { data: CanvasItemNodeData; selected?: boolean }) {
-  const { item, onUpdate, onDelete, onBringToFront } = data;
+  const { item, groupId, onUpdate, onDelete, onBringToFront, onGroup, onUngroup } = data;
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState(item.text);
 
@@ -62,6 +72,7 @@ function CanvasItemNode({ data, selected }: { data: CanvasItemNodeData; selected
     const options = [
       { label: '编辑', action: () => item.kind === 'text' && setEditing(true), hide: item.kind !== 'text' },
       { label: '置顶', action: onBringToFront },
+      { label: groupId ? '解组' : '成组（需多选）', action: groupId ? () => onUngroup?.() : () => onGroup?.(), hide: !groupId && !onGroup },
       { label: '删除', action: onDelete, danger: true },
     ];
 
@@ -105,6 +116,7 @@ function CanvasItemNode({ data, selected }: { data: CanvasItemNodeData; selected
       <NodeResizer minWidth={80} minHeight={60} isVisible={selected} />
       <div className="mb-1 flex items-center gap-1.5 pointer-events-none">
         <Badge tone={item.kind === 'text' ? 'default' : 'pink'}>{CANVAS_ITEM_KIND_LABELS[item.kind]}</Badge>
+        {groupId ? <span className="text-[10px] text-pink-300/80">◈ 已分组</span> : null}
       </div>
       {editing ? (
         <textarea autoFocus value={text} onChange={(e) => setText(e.target.value)} onBlur={handleSaveText} className="w-full h-[calc(100%-24px)] text-xs bg-[#0e1116] border border-pink-400/40 rounded px-1 py-0.5 resize-none" />
@@ -125,12 +137,32 @@ function CanvasItemNode({ data, selected }: { data: CanvasItemNodeData; selected
 
 
 
+/** 分组背景节点：场景卡片，垫在素材下方 */
+function GroupNode({ data }: { data: { item: CanvasItem; groupColor?: string } }) {
+  const { item, groupColor } = data;
+  return (
+    <div
+      className="relative rounded-2xl border-2 border-dashed h-full w-full p-3"
+      style={{ borderColor: (groupColor ?? '#f472b6') + '55', backgroundColor: (groupColor ?? '#f472b6') + '0d' }}
+    >
+      <div
+        className="absolute -top-3 left-4 rounded-full px-3 py-0.5 text-[11px] font-medium text-white"
+        style={{ backgroundColor: groupColor ?? '#f472b6' }}
+      >
+        🎬 {item.text}
+      </div>
+    </div>
+  );
+}
+
 // 稳定的类型映射：放在组件外部，避免每次渲染重建导致节点闪烁/卡顿
-const NODE_TYPES = { default: CanvasItemNode as any };
+const NODE_TYPES = { default: CanvasItemNode as any, group: GroupNode as any };
 const EDGE_TYPES = { default: undefined as any };
 
 function CanvasInner({ data, projectId }: { data: StudioData; projectId: string }) {
   const [items, setItems] = useState<CanvasItem[]>(data.canvasItems);
+  const [groups, setGroups] = useState<CanvasGroup[]>(data.canvasGroups);
+  const [itemGroups, setItemGroups] = useState<Record<string, string>>(data.itemGroups);
   const { screenToFlowPosition, fitView } = useReactFlow();
 
   const buildNodes = useCallback(
@@ -139,6 +171,7 @@ function CanvasInner({ data, projectId }: { data: StudioData; projectId: string 
         id: item.id,
         data: {
           item,
+          groupId: itemGroups[item.id] ?? null,
           onUpdate: async (patch: Partial<CanvasItem>) => {
             const result = await updateCanvasItemAction(item.id, patch);
             if (result.ok && result.data) setItems((prev) => prev.map((it) => (it.id === item.id ? result.data! : it)));
@@ -154,30 +187,180 @@ function CanvasInner({ data, projectId }: { data: StudioData; projectId: string 
             const result = await bringCanvasItemToFrontAction(item.id);
             if (result.ok && result.data) setItems((prev) => prev.map((it) => (it.id === item.id ? result.data! : it)).sort((a, b) => a.z - b.z));
           },
+          onGroup: () => setSelectedIds((prev) => (prev.includes(item.id) ? prev : [...prev, item.id])),
+          onUngroup: async () => {
+            const gid = itemGroups[item.id];
+            if (!gid) return;
+            await ungroupItemsAction(projectId, gid);
+            setGroups((prev) => prev.filter((g) => g.id !== gid));
+            setItemGroups((prev) => {
+              const next = { ...prev };
+              delete next[item.id];
+              return next;
+            });
+          },
         } as Record<string, unknown>,
         position: { x: item.x, y: item.y },
         style: { width: Math.max(80, item.width || 200), height: Math.max(60, item.height || 120), zIndex: item.z },
         draggable: true,
         type: 'default',
       })) as Node[],
-    [items],
+    [items, itemGroups],
   );
 
   // 关键：nodes 由 ReactFlow 自管状态，拖动时实时更新位置，不会被 items 旧值覆盖
   const [rfNodes, setRfNodes, onRfNodesChange] = useNodesState(buildNodes());
   const [rfEdges, setRfEdges, onRfEdgesChange] = useEdgesState<Edge>([]);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+
+  // 从数据库初始连线
+  useEffect(() => {
+    setRfEdges(
+      data.canvasEdges.map((edge) => ({
+        id: edge.id,
+        source: edge.sourceId,
+        target: edge.targetId,
+        animated: true,
+        style: { stroke: '#f472b6', strokeWidth: 2 },
+        label: edge.label || undefined,
+      })),
+    );
+  }, [data.canvasEdges, setRfEdges]);
+
+  // 分组背景节点（垫在素材下方）
+  const groupNodes: Node[] = groups.map((group) => ({
+    id: group.id,
+    data: {
+      item: {
+        id: group.id,
+        projectId,
+        kind: 'text',
+        text: group.name,
+        x: group.x,
+        y: group.y,
+        width: group.width,
+        height: group.height,
+        z: group.z,
+      } as CanvasItem,
+      isGroup: true,
+      groupColor: group.color,
+    },
+    position: { x: group.x, y: group.y },
+    style: { width: group.width, height: group.height, zIndex: group.z },
+    draggable: false,
+    selectable: false,
+    type: 'group',
+  }));
+
+  const allNodes = [...groupNodes, ...rfNodes];
 
   // 仅在节点数量变化（新建/删除）时重建，拖动中的位置由 ReactFlow 内部维护
   useEffect(() => {
     setRfNodes(buildNodes());
   }, [items.length, setRfNodes, buildNodes]);
 
-  // 拖入连线
+  // 拖入连线（持久化到数据库）
   const onConnect = useCallback(
-    (connection: Connection) =>
-      setRfEdges((eds) => addEdge({ ...connection, animated: true, style: { stroke: '#f472b6', strokeWidth: 2 } } as Edge, eds)),
-    [setRfEdges],
+    (connection: Connection) => {
+      if (!connection.source || !connection.target) return;
+      // 乐观更新：立即显示连线
+      const tempId = `temp_edge_${Date.now()}`;
+      setRfEdges((eds) =>
+        addEdge({ ...connection, id: tempId, animated: true, style: { stroke: '#f472b6', strokeWidth: 2 } } as Edge, eds),
+      );
+      createCanvasEdgeAction(projectId, connection.source, connection.target)
+        .then((result) => {
+          if (result.ok && result.data) {
+            // 用真实 id 替换临时 id
+            setRfEdges((eds) => eds.map((e) => (e.id === tempId ? { ...e, id: result.data!.id } : e)));
+          } else {
+            setRfEdges((eds) => eds.filter((e) => e.id !== tempId));
+          }
+        })
+        .catch(() => {
+          setRfEdges((eds) => eds.filter((e) => e.id !== tempId));
+        });
+    },
+    [projectId, setRfEdges],
   );
+
+  // 一键整理
+  const handleAutoLayout = useCallback(async () => {
+    const result = await autoLayoutCanvasAction(projectId);
+    if (result.ok && result.data) {
+      setItems(result.data);
+      // 只更新已有节点的位置，保留 data 等其他字段
+      const posMap = new Map(result.data.map((item) => [item.id, { x: item.x, y: item.y }]));
+      setRfNodes((prev) =>
+        prev.map((node) => {
+          const pos = posMap.get(node.id);
+          return pos ? { ...node, position: pos } : node;
+        }),
+      );
+    }
+  }, [projectId, setRfNodes]);
+
+  // 应用画布模板
+  const handleApplyTemplate = useCallback(
+    async (templateId: string) => {
+      const result = await applyCanvasTemplateAction(projectId, templateId);
+      if (result.ok && result.data) {
+        setItems((prev) => [...prev, ...result.data!]);
+      }
+    },
+    [projectId],
+  );
+
+  // 从分镜批量导入
+  const handleImportShots = useCallback(async () => {
+    const shots = data.shots;
+    if (!shots || shots.length === 0) {
+      alert('当前项目还没有分镜，请先在第四步生成分镜');
+      return;
+    }
+    const mediaMap: Record<string, { kind: string; url: string }> = {};
+    for (const shot of shots) {
+      if (shot.selectedMediaId && data.media[shot.selectedMediaId]) {
+        const m = data.media[shot.selectedMediaId];
+        mediaMap[shot.selectedMediaId] = { kind: m.kind, url: m.url };
+      }
+    }
+    const result = await importShotsToCanvasAction(
+      projectId,
+      shots.map((shot) => ({
+        shotId: shot.id,
+        index: shot.index,
+        description: shot.description,
+        dialogue: shot.dialogue,
+        durationSec: shot.durationSec,
+        shotSize: shot.shotSize,
+        selectedMediaId: shot.selectedMediaId,
+      })),
+      mediaMap,
+    );
+    if (result.ok && result.data) {
+      setItems((prev) => [...prev, ...result.data!]);
+    }
+  }, [projectId, data.shots, data.media]);
+  const handleGroupSelected = useCallback(async () => {
+    if (selectedIds.length < 2) {
+      alert('请先框选（Ctrl+拖拽）至少 2 个素材再成组');
+      return;
+    }
+    const name = window.prompt('场景名称', `场景 ${groups.length + 1}`);
+    if (name === null) return;
+    const result = await groupItemsAction(projectId, selectedIds, name || '未命名场景');
+    if (result.ok && result.data) {
+      setGroups((prev) => [...prev, result.data!]);
+      const gid = result.data.id;
+      setItemGroups((prev) => {
+        const next = { ...prev };
+        for (const id of selectedIds) next[id] = gid;
+        return next;
+      });
+      setSelectedIds([]);
+    }
+  }, [projectId, selectedIds, groups.length]);
 
   // 乐观更新：立即显示，后台同步
   const createItem = useCallback(
@@ -286,7 +469,7 @@ function CanvasInner({ data, projectId }: { data: StudioData; projectId: string 
       onDrop={handleDrop}
     >
       <ReactFlow
-        nodes={rfNodes}
+        nodes={allNodes}
         edges={rfEdges}
         fitView={false}
         minZoom={0.1}
@@ -298,7 +481,18 @@ function CanvasInner({ data, projectId }: { data: StudioData; projectId: string 
         nodeTypes={NODE_TYPES}
         edgeTypes={EDGE_TYPES}
         onNodesChange={handleNodesChange}
-        onEdgesChange={onRfEdgesChange}
+        onEdgesChange={(changes) => {
+          onRfEdgesChange(changes);
+          // 连线删除时同步数据库
+          for (const change of changes) {
+            if (change.type === 'remove') {
+              deleteCanvasEdgeAction(change.id).catch(console.error);
+            }
+          }
+        }}
+        onSelectionChange={(selection) => {
+          setSelectedIds(selection.nodes.map((n) => n.id));
+        }}
         onConnect={onConnect}
         onNodeDragStop={(_, node) => {
           setItems((prev) => prev.map((it) => (it.id === node.id ? { ...it, x: node.position.x, y: node.position.y } : it)));
@@ -316,6 +510,47 @@ function CanvasInner({ data, projectId }: { data: StudioData; projectId: string 
           zoomable
         />
       </ReactFlow>
+
+      {/* 画布工具栏 */}
+      <div className="absolute left-3 top-3 z-20 flex flex-wrap gap-1.5 rounded-xl border border-[#333b4a] bg-[#12151c]/90 p-1.5 backdrop-blur">
+        <button
+          type="button"
+          onClick={() => void handleGroupSelected()}
+          disabled={selectedIds.length < 2}
+          className="rounded-lg px-2.5 py-1 text-[11px] text-slate-300 transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
+          title="框选多个素材后打包成场景卡片"
+        >
+          🎬 成组{selectedIds.length > 1 ? ` (${selectedIds.length})` : ''}
+        </button>
+        <button
+          type="button"
+          onClick={() => void handleAutoLayout()}
+          className="rounded-lg px-2.5 py-1 text-[11px] text-slate-300 transition-colors hover:bg-white/10"
+        >
+          ✨ 一键整理
+        </button>
+        <button
+          type="button"
+          onClick={() => void handleImportShots()}
+          className="rounded-lg px-2.5 py-1 text-[11px] text-slate-300 transition-colors hover:bg-white/10"
+          title="把第四步的分镜批量铺到画布"
+        >
+          🎞 导入分镜
+        </button>
+        <div className="mx-0.5 w-px bg-[#333b4a]" />
+        {CANVAS_TEMPLATES.map((template) => (
+          <button
+            key={template.id}
+            type="button"
+            onClick={() => void handleApplyTemplate(template.id)}
+            title={template.description}
+            className="rounded-lg px-2.5 py-1 text-[11px] text-pink-300/90 transition-colors hover:bg-pink-500/10"
+          >
+            📐 {template.name}
+          </button>
+        ))}
+      </div>
+
       {items.length === 0 && (<div className="absolute inset-0 flex items-center justify-center pointer-events-none"><Empty text="无限画布为空。双击或右键添加素材。" /></div>)}
     </div>
   );

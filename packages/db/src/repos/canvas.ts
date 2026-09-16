@@ -124,6 +124,7 @@ export function updateCanvasItem(
 }
 
 export function deleteCanvasItem(id: ID): void {
+  // 外键级联会自动清理 canvas_edges，这里做双保险
   getDb().prepare('DELETE FROM canvas_items WHERE id = ?').run(id);
 }
 

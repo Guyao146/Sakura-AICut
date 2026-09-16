@@ -90,6 +90,120 @@ export interface CanvasItem extends Timestamps {
   rotation?: number;
 }
 
+/** 画布连线（表达素材间的叙事顺序 / 引用关系） */
+export interface CanvasEdge extends Timestamps {
+  id: ID;
+  projectId: ID;
+  sourceId: ID;
+  targetId: ID;
+  /** 连线标签，例如"切换到""回忆" */
+  label?: string;
+}
+
+/** 画布分组（场景卡片：把一组素材/镜头打包） */
+export interface CanvasGroup extends Timestamps {
+  id: ID;
+  projectId: ID;
+  name: string;
+  color: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  /** 分组层级默认 -1，垫在素材下方 */
+  z: number;
+}
+
+/** 画布模板：预设的分镜布局 */
+export interface CanvasTemplate {
+  id: string;
+  name: string;
+  description: string;
+  /** 模板预设的节点布局（坐标为相对画布原点） */
+  nodes: Array<{
+    kind: CanvasItemKind;
+    text: string;
+    x: number;
+    y: number;
+    width?: number;
+    height?: number;
+  }>;
+  /** 模板内连线（按 nodes 数组下标） */
+  edges?: Array<[number, number]>;
+}
+
+/** 三幕式经典结构 */
+export const CANVAS_TEMPLATE_THREE_ACT: CanvasTemplate = {
+  id: 'three-act',
+  name: '三幕式',
+  description: '建置 → 冲突 → 解决，经典电影叙事结构',
+  nodes: [
+    { kind: 'text', text: '第一幕 · 建置', x: 0, y: 0, width: 320, height: 80 },
+    { kind: 'text', text: '第二幕 · 冲突', x: 480, y: 0, width: 320, height: 80 },
+    { kind: 'text', text: '第三幕 · 解决', x: 960, y: 0, width: 320, height: 80 },
+    { kind: 'text', text: '开场画面', x: 0, y: 160, width: 280, height: 60 },
+    { kind: 'text', text: '激励事件', x: 480, y: 160, width: 280, height: 60 },
+    { kind: 'text', text: '高潮', x: 960, y: 160, width: 280, height: 60 },
+    { kind: 'text', text: '人物介绍', x: 0, y: 280, width: 280, height: 60 },
+    { kind: 'text', text: '障碍升级', x: 480, y: 280, width: 280, height: 60 },
+    { kind: 'text', text: '结局画面', x: 960, y: 280, width: 280, height: 60 },
+  ],
+  edges: [
+    [0, 1],
+    [1, 2],
+    [3, 4],
+    [4, 5],
+    [6, 7],
+    [7, 8],
+  ],
+};
+
+/** 起承转合（中式四段结构） */
+export const CANVAS_TEMPLATE_QICHENG: CanvasTemplate = {
+  id: 'qi-cheng-zhuan-he',
+  name: '起承转合',
+  description: '起 → 承 → 转 → 合，中式短剧节奏',
+  nodes: [
+    { kind: 'text', text: '起 · 开场钩子', x: 0, y: 0, width: 300, height: 70 },
+    { kind: 'text', text: '承 · 铺垫发展', x: 400, y: 0, width: 300, height: 70 },
+    { kind: 'text', text: '转 · 反转冲突', x: 800, y: 0, width: 300, height: 70 },
+    { kind: 'text', text: '合 · 收尾点题', x: 1200, y: 0, width: 300, height: 70 },
+  ],
+  edges: [
+    [0, 1],
+    [1, 2],
+    [2, 3],
+  ],
+};
+
+/** 竖屏短剧爆款结构（前 3 秒留人） */
+export const CANVAS_TEMPLATE_SHORTDRAMA: CanvasTemplate = {
+  id: 'short-drama',
+  name: '竖屏短剧',
+  description: '黄金 3 秒 → 矛盾激化 → 反转 → 钩子结尾',
+  nodes: [
+    { kind: 'text', text: '黄金 3 秒（强冲突开场）', x: 0, y: 0, width: 360, height: 70 },
+    { kind: 'text', text: '身份/误会建立', x: 0, y: 140, width: 360, height: 70 },
+    { kind: 'text', text: '打脸准备', x: 0, y: 280, width: 360, height: 70 },
+    { kind: 'text', text: '反转 · 真相揭晓', x: 0, y: 420, width: 360, height: 70 },
+    { kind: 'text', text: '爽点爆发', x: 0, y: 560, width: 360, height: 70 },
+    { kind: 'text', text: '钩子结尾（引导下一集）', x: 0, y: 700, width: 360, height: 70 },
+  ],
+  edges: [
+    [0, 1],
+    [1, 2],
+    [2, 3],
+    [3, 4],
+    [4, 5],
+  ],
+};
+
+export const CANVAS_TEMPLATES: CanvasTemplate[] = [
+  CANVAS_TEMPLATE_THREE_ACT,
+  CANVAS_TEMPLATE_QICHENG,
+  CANVAS_TEMPLATE_SHORTDRAMA,
+];
+
 export interface Asset extends Timestamps {
   id: ID;
   projectId: ID;

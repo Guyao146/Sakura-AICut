@@ -303,6 +303,47 @@ CREATE TABLE IF NOT EXISTS canvas_items (
 );
 CREATE INDEX IF NOT EXISTS idx_canvas_project ON canvas_items(project_id, z, created_at);
 
+-- 画布连线（节点之间的叙事顺序 / 引用关系）
+CREATE TABLE IF NOT EXISTS canvas_edges (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL,
+  source_id TEXT NOT NULL,
+  target_id TEXT NOT NULL,
+  label TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+  FOREIGN KEY (source_id) REFERENCES canvas_items(id) ON DELETE CASCADE,
+  FOREIGN KEY (target_id) REFERENCES canvas_items(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_canvas_edges_project ON canvas_edges(project_id);
+
+-- 画布分组（把一组素材/镜头打包成场景卡片）
+CREATE TABLE IF NOT EXISTS canvas_groups (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL,
+  name TEXT NOT NULL DEFAULT '未命名场景',
+  color TEXT NOT NULL DEFAULT '#f472b6',
+  x REAL NOT NULL DEFAULT 0,
+  y REAL NOT NULL DEFAULT 0,
+  width REAL NOT NULL DEFAULT 600,
+  height REAL NOT NULL DEFAULT 400,
+  z INTEGER NOT NULL DEFAULT -1,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_canvas_groups_project ON canvas_groups(project_id);
+
+-- 分组与素材的关联（一个素材只属于一个分组）
+CREATE TABLE IF NOT EXISTS canvas_group_items (
+  group_id TEXT NOT NULL,
+  item_id TEXT NOT NULL,
+  PRIMARY KEY (group_id, item_id),
+  FOREIGN KEY (group_id) REFERENCES canvas_groups(id) ON DELETE CASCADE,
+  FOREIGN KEY (item_id) REFERENCES canvas_items(id) ON DELETE CASCADE
+);
+
 -- 全局设置（键值）
 CREATE TABLE IF NOT EXISTS settings (
   key TEXT PRIMARY KEY,

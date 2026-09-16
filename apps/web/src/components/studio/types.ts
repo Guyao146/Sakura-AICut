@@ -2,6 +2,8 @@ import type {
   AgentChatTurn,
   AgentPlan,
   Asset,
+  CanvasEdge,
+  CanvasGroup,
   CanvasItem,
   MediaFile,
   Project,
@@ -24,6 +26,10 @@ export interface StudioData {
   timeline: Timeline | null;
   media: Record<string, MediaFile>;
   canvasItems: CanvasItem[];
+  canvasEdges: CanvasEdge[];
+  canvasGroups: CanvasGroup[];
+  /** 素材 → 分组 ID 映射 */
+  itemGroups: Record<string, string>;
   chat: Array<{ id: string; role: string; content: string; createdAt: string }>;
   promptTemplates: PromptTemplate[];
   customCameraMoves: CameraMoveTemplate[];
