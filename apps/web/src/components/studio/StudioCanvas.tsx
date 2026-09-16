@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   Background,
   Controls,
@@ -8,6 +8,7 @@ import {
   ReactFlowProvider,
   type Node,
   type NodeChange,
+  useNodesState,
 } from '@xyflow/react';
 import { NodeResizer } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
@@ -33,8 +34,8 @@ interface CanvasItemNodeData {
   isSelected: boolean;
 }
 
-function CanvasItemNode({ data }: { data: CanvasItemNodeData }) {
-  const { item, onUpdate, onDelete, onBringToFront, isSelected } = data;
+function CanvasItemNode({ data, selected }: { data: CanvasItemNodeData; selected?: boolean }) {
+  const { item, onUpdate, onDelete, onBringToFront } = data;
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState(item.text);
 
@@ -83,7 +84,7 @@ function CanvasItemNode({ data }: { data: CanvasItemNodeData }) {
     <div
       className={clsx(
         'relative rounded-lg border bg-[#12151c] p-2 shadow-md h-full w-full',
-        isSelected ? 'ring-2 ring-pink-400/70' : 'border-[#333b4a]',
+        selected ? 'ring-2 ring-pink-400/70' : 'border-[#333b4a]',
       )}
       onContextMenu={handleRightClick}
       onDoubleClick={() => item.kind === 'text' && setEditing(true)}
@@ -113,32 +114,44 @@ function CanvasItemNode({ data }: { data: CanvasItemNodeData }) {
 
 function CanvasInner({ data, projectId }: { data: StudioData; projectId: string }) {
   const [items, setItems] = useState<CanvasItem[]>(data.canvasItems);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  const nodes: Node[] = items.map((item) => ({
-    id: item.id,
-    data: {
-      item,
-      onUpdate: async (patch: Partial<CanvasItem>) => {
-        const result = await updateCanvasItemAction(item.id, patch);
-        if (result.ok && result.data) setItems((prev) => prev.map((it) => (it.id === item.id ? result.data! : it)));
-      },
-      onDelete: async () => {
-        const result = await deleteCanvasItemAction(item.id);
-        if (result.ok) setItems((prev) => prev.filter((it) => it.id !== item.id));
-      },
-      onBringToFront: async () => {
-        const result = await bringCanvasItemToFrontAction(item.id);
-        if (result.ok && result.data) setItems((prev) => prev.map((it) => (it.id === item.id ? result.data! : it)).sort((a, b) => a.z - b.z));
-      },
-      isSelected: selectedId === item.id,
-    } as Record<string, unknown>,
-    position: { x: item.x, y: item.y },
-    style: { width: Math.max(80, item.width || 200), height: Math.max(60, item.height || 120), zIndex: item.z },
-    draggable: true,
-    resizable: true,
-    type: 'default',
-  })) as Node[];
+  const buildNodes = useCallback(
+    (): Node[] =>
+      items.map((item) => ({
+        id: item.id,
+        data: {
+          item,
+          onUpdate: async (patch: Partial<CanvasItem>) => {
+            const result = await updateCanvasItemAction(item.id, patch);
+            if (result.ok && result.data) setItems((prev) => prev.map((it) => (it.id === item.id ? result.data! : it)));
+          },
+          onDelete: async () => {
+            const result = await deleteCanvasItemAction(item.id);
+            if (result.ok) {
+              setItems((prev) => prev.filter((it) => it.id !== item.id));
+              setRfNodes((prev) => prev.filter((n) => n.id !== item.id));
+            }
+          },
+          onBringToFront: async () => {
+            const result = await bringCanvasItemToFrontAction(item.id);
+            if (result.ok && result.data) setItems((prev) => prev.map((it) => (it.id === item.id ? result.data! : it)).sort((a, b) => a.z - b.z));
+          },
+        } as Record<string, unknown>,
+        position: { x: item.x, y: item.y },
+        style: { width: Math.max(80, item.width || 200), height: Math.max(60, item.height || 120), zIndex: item.z },
+        draggable: true,
+        type: 'default',
+      })) as Node[],
+    [items],
+  );
+
+  // 关键：nodes 由 ReactFlow 自管状态，拖动时实时更新位置，不会被 items 旧值覆盖
+  const [rfNodes, setRfNodes, onRfNodesChange] = useNodesState(buildNodes());
+
+  // 仅在节点数量变化（新建/删除）时重建，拖动中的位置由 ReactFlow 内部维护
+  useEffect(() => {
+    setRfNodes(buildNodes());
+  }, [items.length, setRfNodes, buildNodes]);
 
   // 乐观更新：立即显示，后台同步
   const createItem = useCallback((kind: CanvasItemKind, x: number, y: number) => {
@@ -192,27 +205,27 @@ function CanvasInner({ data, projectId }: { data: StudioData; projectId: string 
   }, [createItem]);
 
   const handleNodesChange = useCallback((changes: NodeChange[]) => {
+    // 委托给 ReactFlow 内置处理器：拖动中实时更新位置、处理删除
+    onRfNodesChange(changes);
     for (const change of changes) {
-      // 删除 position 处理 - 避免频繁更新导致闪烁
       if (change.type === 'remove') {
         const nodeId = change.id;
         setItems((prev) => prev.filter((it) => it.id !== nodeId));
         deleteCanvasItemAction(nodeId).catch(console.error);
       }
     }
-  }, []);
+  }, [onRfNodesChange]);
 
   return (
     <div className="relative size-full bg-[#0e1116]" onDoubleClick={handlePaneDoubleClick} onContextMenu={handlePaneRightClick}>
       <ReactFlow 
-        nodes={nodes} 
+        nodes={rfNodes} 
         edges={[]} 
         fitView={false} 
         minZoom={0.1} 
         maxZoom={3} 
         deleteKeyCode={['Backspace', 'Delete']} 
         nodeTypes={{ default: CanvasItemNode as any }} 
-        onSelectionChange={(selection) => { setSelectedId(selection.nodes.length > 0 ? selection.nodes[0]!.id : null); }} 
         onNodesChange={handleNodesChange}
         onNodeDragStop={(_, node) => {
           setItems((prev) => prev.map((it) => (it.id === node.id ? { ...it, x: node.position.x, y: node.position.y } : it)));
