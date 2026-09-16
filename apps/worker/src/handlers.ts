@@ -85,7 +85,19 @@ const handleAssetPrepare: Handler = async ({ job, progress, log, isCanceled }) =
 
 /** 生成单个镜头片段：提交异步任务并轮询到结束 */
 const handleVideoGenerate: Handler = async ({ job, progress, log }) => {
-  const { shotId, withFirstFrame } = job.payload as { shotId: string; withFirstFrame?: boolean };
+  const {
+    shotId,
+    withFirstFrame,
+    prompt,
+    durationSec,
+    referenceMediaIds,
+  } = job.payload as {
+    shotId: string;
+    withFirstFrame?: boolean;
+    prompt?: string;
+    durationSec?: number;
+    referenceMediaIds?: string[];
+  };
   const shot = getShot(shotId);
   if (!shot) throw new Error(`镜头不存在：${shotId}`);
 
@@ -96,7 +108,12 @@ const handleVideoGenerate: Handler = async ({ job, progress, log }) => {
   }
 
   progress(20, '正在提交视频任务');
-  const { providerId, providerName, taskId } = await submitShotVideo(shotId, { withFirstFrame });
+  const { providerId, providerName, taskId } = await submitShotVideo(shotId, {
+    withFirstFrame,
+    prompt,
+    durationSec,
+    referenceMediaIds,
+  });
   log(`已提交到「${providerName}」，任务 ID：${taskId}`);
 
   const timeoutMs = Number(process.env.ASYNC_TASK_TIMEOUT ?? 1800) * 1000;

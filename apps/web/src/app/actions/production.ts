@@ -23,6 +23,11 @@ import {
   planAssetsFromScreenplay,
   planShotsFromScreenplay,
   refineAssetPrompt,
+  setShotFirstFrame,
+  setShotLastFrame,
+  clearShotFrames,
+  selectShotClip,
+  deleteShotClip,
 } from '@sakura/pipeline';
 import {
   enqueueAssetImage,
@@ -241,6 +246,92 @@ export async function generateShotsAction(
         : enqueueBatchShotVideos(projectId, targets, options);
     refresh(projectId);
     return { ok: true, data: { jobId: job.id, count: targets.length } };
+  } catch (error) {
+    return toError(error);
+  }
+}
+
+/* ---------------------------- 片段重拍 & 多参创作 ---------------------------- */
+
+/**
+ * 片段重拍：只重拍选中的一个镜头，可覆盖提示词 / 时长 / 追加参考图，
+ * 首尾帧用镜头当前绑定的媒体（可用 setShotFrameAction 指定）。
+ */
+export async function reshootShotAction(
+  shotId: string,
+  options: { prompt?: string; durationSec?: number; referenceMediaIds?: string[]; withFirstFrame?: boolean } = {},
+): Promise<ActionResult<{ jobId: string }>> {
+  try {
+    const shot = getShot(shotId);
+    if (!shot) throw new Error(`镜头不存在：${shotId}`);
+    const job = enqueueShotVideo({
+      projectId: shot.projectId,
+      shotId,
+      regenerate: true,
+      withFirstFrame: options.withFirstFrame ?? true,
+      prompt: options.prompt,
+      durationSec: options.durationSec,
+      referenceMediaIds: options.referenceMediaIds,
+    });
+    refresh(shot.projectId);
+    return { ok: true, data: { jobId: job.id } };
+  } catch (error) {
+    return toError(error);
+  }
+}
+
+/** 把某张图片设为镜头首帧或尾帧（多参创作的关键：精准控制起止画面） */
+export async function setShotFrameAction(
+  shotId: string,
+  mediaId: string,
+  which: 'first' | 'last',
+): Promise<ActionResult<Shot>> {
+  try {
+    const shot = getShot(shotId);
+    if (!shot) throw new Error(`镜头不存在：${shotId}`);
+    const media = which === 'first' ? setShotFirstFrame(shotId, mediaId) : setShotLastFrame(shotId, mediaId);
+    refresh(shot.projectId);
+    return { ok: true, data: getShot(shotId)! };
+  } catch (error) {
+    return toError(error);
+  }
+}
+
+/** 清除镜头首/尾帧 */
+export async function clearShotFramesAction(
+  shotId: string,
+  which: 'first' | 'last' | 'both' = 'both',
+): Promise<ActionResult<Shot>> {
+  try {
+    const shot = getShot(shotId);
+    if (!shot) throw new Error(`镜头不存在：${shotId}`);
+    clearShotFrames(shotId, which);
+    refresh(shot.projectId);
+    return { ok: true, data: getShot(shotId)! };
+  } catch (error) {
+    return toError(error);
+  }
+}
+
+/** 切换镜头的入轨片段（在多个重拍版本里选一个） */
+export async function selectShotClipAction(shotId: string, mediaId: string): Promise<ActionResult<Shot>> {
+  try {
+    const shot = selectShotClip(shotId, mediaId);
+    refresh(shot.projectId);
+    return { ok: true, data: shot };
+  } catch (error) {
+    return toError(error);
+  }
+}
+
+/** 删除镜头的某个片段版本 */
+export async function deleteShotClipAction(shotId: string, mediaId: string): Promise<ActionResult<Shot>> {
+  try {
+    const shot = getShot(shotId);
+    if (!shot) throw new Error(`镜头不存在：${shotId}`);
+    const updated = deleteShotClip(shotId, mediaId);
+    refresh(shot.projectId);
+    return { ok: true, data: updated };
   } catch (error) {
     return toError(error);
   }

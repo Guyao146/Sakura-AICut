@@ -41,6 +41,7 @@ import {
 import { CanvasInspector } from './CanvasInspector';
 import type { CanvasItem, CanvasGroup } from '@sakura/core';
 import { CANVAS_ITEM_KIND_LABELS, CANVAS_TEMPLATES } from '@sakura/core';
+import { setShotFrameAction } from '@/app/actions/production';
 
 type CanvasItemKind = 'text' | 'image' | 'video' | 'audio';
 
@@ -51,12 +52,16 @@ interface CanvasItemNodeData {
   onDelete: () => Promise<void>;
   onBringToFront: () => Promise<void>;
   onGenerate?: (itemIds: string[]) => void;
+  /** 图片节点发到镜头首/尾帧（多参创作联动） */
+  onSendToShot?: (mediaId: string, shotId: string, which: 'first' | 'last') => void;
+  /** 镜头列表（发到镜头子菜单用） */
+  shots?: Array<{ id: string; index: number; description: string }>;
   onGroup?: () => void;
   onUngroup?: () => void;
 }
 
 function CanvasItemNode({ data, selected }: { data: CanvasItemNodeData; selected?: boolean }) {
-  const { item, groupId, onUpdate, onDelete, onBringToFront, onGenerate, onGroup, onUngroup } = data;
+  const { item, groupId, onUpdate, onDelete, onBringToFront, onGenerate, onSendToShot, shots, onGroup, onUngroup } = data;
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState(item.text);
 
@@ -76,10 +81,40 @@ function CanvasItemNode({ data, selected }: { data: CanvasItemNodeData; selected
     const options = [
       { label: '编辑', action: () => item.kind === 'text' && setEditing(true), hide: item.kind !== 'text' },
       { label: '✨ 生成图片', action: () => onGenerate?.([item.id]), hide: !item.text.trim() || !onGenerate },
+      { label: '➤ 发到镜头首帧…', action: () => showShotSubmenu('first'), hide: item.kind !== 'image' || !item.mediaId || !onSendToShot },
+      { label: '➤ 发到镜头尾帧…', action: () => showShotSubmenu('last'), hide: item.kind !== 'image' || !item.mediaId || !onSendToShot },
       { label: '置顶', action: onBringToFront },
       { label: groupId ? '解组' : '成组（需多选）', action: groupId ? () => onUngroup?.() : () => onGroup?.(), hide: !groupId && !onGroup },
       { label: '删除', action: onDelete, danger: true },
     ];
+
+    /** 二级菜单：选择要设为首/尾帧的镜头 */
+    function showShotSubmenu(which: 'first' | 'last') {
+      const list = shots ?? [];
+      if (list.length === 0) {
+        alert('当前项目还没有镜头，请先在第四步拆解分镜');
+        return;
+      }
+      const sub = document.createElement('div');
+      sub.className = 'fixed bg-[#1a1f2e] border border-[#333b4a] rounded-lg z-[60] py-1 text-xs max-h-64 overflow-y-auto';
+      sub.style.left = `${e.clientX + 8}px`;
+      sub.style.top = `${e.clientY}px`;
+      list.forEach((shot) => {
+        const btn = document.createElement('button');
+        btn.textContent = `#${shot.index} ${shot.description.slice(0, 18)}`;
+        btn.className = 'w-full text-left px-3 py-1.5 hover:bg-white/5';
+        btn.onclick = async (ev: any) => {
+          ev.stopPropagation();
+          onSendToShot?.(item.mediaId as string, shot.id, which);
+          sub.remove();
+        };
+        sub.appendChild(btn);
+      });
+      document.body.appendChild(sub);
+      setTimeout(() => {
+        document.addEventListener('click', () => sub.remove(), { once: true });
+      }, 0);
+    }
 
     options.forEach(({ label, action, danger, hide }: any) => {
       if (hide) return;
@@ -218,6 +253,15 @@ function CanvasInner({ data, projectId }: { data: StudioData; projectId: string 
     [projectId],
   );
 
+  // 画布图片 → 镜头首/尾帧（多参创作联动）
+  const handleSendToShot = useCallback(
+    async (mediaId: string, shotId: string, which: 'first' | 'last') => {
+      const result = await setShotFrameAction(shotId, mediaId, which);
+      if (!result.ok) alert(result.error ?? '设置失败');
+    },
+    [],
+  );
+
   const buildNodes = useCallback(
     (): Node[] =>
       items.map((item) => ({
@@ -241,6 +285,9 @@ function CanvasInner({ data, projectId }: { data: StudioData; projectId: string 
             if (result.ok && result.data) setItems((prev) => prev.map((it) => (it.id === item.id ? result.data! : it)).sort((a, b) => a.z - b.z));
           },
           onGenerate: (ids: string[]) => void handleGenerateImages(ids),
+          onSendToShot: (mediaId: string, shotId: string, which: 'first' | 'last') =>
+            void handleSendToShot(mediaId, shotId, which),
+          shots: data.shots.map((shot) => ({ id: shot.id, index: shot.index, description: shot.description })),
           onGroup: () => setSelectedIds((prev) => (prev.includes(item.id) ? prev : [...prev, item.id])),
           onUngroup: async () => {
             const gid = itemGroups[item.id];
@@ -259,7 +306,7 @@ function CanvasInner({ data, projectId }: { data: StudioData; projectId: string 
         draggable: true,
         type: 'default',
       })) as Node[],
-    [items, itemGroups, handleGenerateImages],
+    [items, itemGroups, handleGenerateImages, handleSendToShot],
   );
 
   // 关键：nodes 由 ReactFlow 自管状态，拖动时实时更新位置，不会被 items 旧值覆盖

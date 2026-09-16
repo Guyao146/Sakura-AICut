@@ -138,8 +138,18 @@ export async function generateShotFirstFrame(shotId: string): Promise<MediaFile>
 
 /* ============================ 镜头视频片段 ============================ */
 
-/** 组装镜头视频请求（运镜模板 + 人物/场景 + 首尾帧） */
-export function buildShotVideoRequest(shotId: string, options: { withFirstFrame?: boolean } = {}) {
+/** 组装镜头视频请求（运镜模板 + 人物/场景 + 首尾帧 + 参考图） */
+export interface ShotVideoOptions {
+  withFirstFrame?: boolean;
+  /** 覆盖提示词（片段重拍时用） */
+  prompt?: string;
+  /** 覆盖时长（片段重拍时用） */
+  durationSec?: number;
+  /** 额外参考图（主体参考，提升角色一致性） */
+  referenceMediaIds?: string[];
+}
+
+export function buildShotVideoRequest(shotId: string, options: ShotVideoOptions = {}) {
   const shot = getShot(shotId);
   if (!shot) throw new Error(`镜头不存在：${shotId}`);
   const content = loadContent(shot.projectId);
@@ -149,39 +159,102 @@ export function buildShotVideoRequest(shotId: string, options: { withFirstFrame?
   const camera = shot.cameraTemplateId ? findCameraMove(shot.cameraTemplateId) : undefined;
   const cameraPrompt = shot.cameraPrompt || camera?.prompt || 'static camera, cinematic framing';
   const firstFrameMedia = shot.firstFrameMediaId ? getMedia(shot.firstFrameMediaId) : null;
+  const lastFrameMedia = shot.lastFrameMediaId ? getMedia(shot.lastFrameMediaId) : null;
 
-  const prompt = buildShotVideoPrompt({
-    shot,
-    cameraPrompt,
-    characters,
-    location,
-    style: content.project.brief.style,
-    aspectRatio: content.project.brief.aspectRatio,
-    hasFirstFrame: Boolean(firstFrameMedia?.path),
-  });
+  const prompt =
+    options.prompt?.trim() ||
+    buildShotVideoPrompt({
+      shot,
+      cameraPrompt,
+      characters,
+      location,
+      style: content.project.brief.style,
+      aspectRatio: content.project.brief.aspectRatio,
+      hasFirstFrame: Boolean(firstFrameMedia?.path),
+    });
 
   const firstFrameImage =
     options.withFirstFrame !== false && firstFrameMedia?.path ? readAsDataUri(firstFrameMedia.path) ?? undefined : undefined;
+  const lastFrameImage = lastFrameMedia?.path ? readAsDataUri(lastFrameMedia.path) ?? undefined : undefined;
+
+  // 参考图：显式传入的媒体 + 人物资产图
+  const referenceImages: string[] = [];
+  for (const mediaId of options.referenceMediaIds ?? []) {
+    const media = getMedia(mediaId);
+    const uri = media?.path ? readAsDataUri(media.path) : undefined;
+    if (uri) referenceImages.push(uri);
+  }
 
   return {
     shot,
     prompt,
     firstFrameImage,
+    lastFrameImage,
     request: {
       prompt,
       negativePrompt: shot.negativePrompt ?? content.project.brief.negativePrompt,
-      durationSec: shot.durationSec,
+      durationSec: options.durationSec ?? shot.durationSec,
       aspectRatio: content.project.brief.aspectRatio,
       firstFrameImage,
+      lastFrameImage,
+      referenceImages: referenceImages.length > 0 ? referenceImages : undefined,
       seed: content.project.brief.seed,
     },
   };
 }
 
+/** 把已有媒体设为镜头首帧（多参创作：用画布生成的图当首帧） */
+export function setShotFirstFrame(shotId: string, mediaId: string): MediaFile {
+  const media = getMedia(mediaId);
+  if (!media) throw new Error(`媒体不存在：${mediaId}`);
+  if (media.kind !== 'image') throw new Error('只有图片能作为首帧');
+  updateShot(shotId, { firstFrameMediaId: mediaId });
+  return media;
+}
+
+/** 把已有媒体设为镜头尾帧（首尾帧生视频，精准控制起止画面） */
+export function setShotLastFrame(shotId: string, mediaId: string): MediaFile {
+  const media = getMedia(mediaId);
+  if (!media) throw new Error(`媒体不存在：${mediaId}`);
+  if (media.kind !== 'image') throw new Error('只有图片能作为尾帧');
+  updateShot(shotId, { lastFrameMediaId: mediaId });
+  return media;
+}
+
+/** 清除镜头首/尾帧 */
+export function clearShotFrames(shotId: string, which: 'first' | 'last' | 'both' = 'both'): void {
+  const patch: { firstFrameMediaId?: null; lastFrameMediaId?: null } = {};
+  if (which === 'first' || which === 'both') patch.firstFrameMediaId = null;
+  if (which === 'last' || which === 'both') patch.lastFrameMediaId = null;
+  updateShot(shotId, patch);
+}
+
+/** 选中某个已生成片段作为入轨片段（片段重拍后切换版本） */
+export function selectShotClip(shotId: string, mediaId: string): Shot {
+  const shot = getShot(shotId);
+  if (!shot) throw new Error(`镜头不存在：${shotId}`);
+  if (!shot.clipMediaIds.includes(mediaId)) throw new Error('该片段不属于这个镜头');
+  return updateShot(shotId, { selectedMediaId: mediaId, status: 'succeeded', error: null });
+}
+
+/** 删除镜头的某个片段版本 */
+export function deleteShotClip(shotId: string, mediaId: string): Shot {
+  const shot = getShot(shotId);
+  if (!shot) throw new Error(`镜头不存在：${shotId}`);
+  const clipMediaIds = shot.clipMediaIds.filter((id) => id !== mediaId);
+  const selectedMediaId =
+    shot.selectedMediaId === mediaId ? (clipMediaIds[0] ?? null) : shot.selectedMediaId;
+  return updateShot(shotId, {
+    clipMediaIds,
+    selectedMediaId,
+    status: clipMediaIds.length === 0 ? 'pending' : shot.status,
+  });
+}
+
 /** 提交镜头视频任务，返回供应商任务句柄 */
 export async function submitShotVideo(
   shotId: string,
-  options: { withFirstFrame?: boolean } = {},
+  options: ShotVideoOptions = {},
 ): Promise<{ providerId: string; providerName: string; taskId: string }> {
   const { request } = buildShotVideoRequest(shotId, options);
   updateShot(shotId, { status: 'running', error: null });

@@ -27,6 +27,12 @@ export function enqueueShotVideo(input: {
   shotId: string;
   regenerate?: boolean;
   withFirstFrame?: boolean;
+  /** 覆盖提示词（片段重拍） */
+  prompt?: string;
+  /** 覆盖时长 */
+  durationSec?: number;
+  /** 参考图媒体 ID */
+  referenceMediaIds?: string[];
 }): Job {
   updateShot(input.shotId, { status: 'queued', error: null });
   return createJob({
@@ -36,10 +42,13 @@ export function enqueueShotVideo(input: {
       shotId: input.shotId,
       regenerate: input.regenerate ?? false,
       withFirstFrame: input.withFirstFrame ?? true,
+      prompt: input.prompt,
+      durationSec: input.durationSec,
+      referenceMediaIds: input.referenceMediaIds,
     },
     targetType: 'shot',
     targetId: input.shotId,
-    stageLabel: '排队等待生成镜头片段',
+    stageLabel: input.prompt ? '片段重拍中' : '排队等待生成镜头片段',
     priority: 5,
   });
 }
