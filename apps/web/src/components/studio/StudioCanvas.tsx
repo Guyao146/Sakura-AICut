@@ -36,6 +36,7 @@ import {
   applyCanvasTemplateAction,
   importShotsToCanvasAction,
   importCanvasJsonAction,
+  generateCanvasItemsAction,
 } from '@/app/actions/canvas';
 import { CanvasInspector } from './CanvasInspector';
 import type { CanvasItem, CanvasGroup } from '@sakura/core';
@@ -49,12 +50,13 @@ interface CanvasItemNodeData {
   onUpdate: (patch: Partial<CanvasItem>) => Promise<void>;
   onDelete: () => Promise<void>;
   onBringToFront: () => Promise<void>;
+  onGenerate?: (itemIds: string[]) => void;
   onGroup?: () => void;
   onUngroup?: () => void;
 }
 
 function CanvasItemNode({ data, selected }: { data: CanvasItemNodeData; selected?: boolean }) {
-  const { item, groupId, onUpdate, onDelete, onBringToFront, onGroup, onUngroup } = data;
+  const { item, groupId, onUpdate, onDelete, onBringToFront, onGenerate, onGroup, onUngroup } = data;
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState(item.text);
 
@@ -73,6 +75,7 @@ function CanvasItemNode({ data, selected }: { data: CanvasItemNodeData; selected
 
     const options = [
       { label: '编辑', action: () => item.kind === 'text' && setEditing(true), hide: item.kind !== 'text' },
+      { label: '✨ 生成图片', action: () => onGenerate?.([item.id]), hide: !item.text.trim() || !onGenerate },
       { label: '置顶', action: onBringToFront },
       { label: groupId ? '解组' : '成组（需多选）', action: groupId ? () => onUngroup?.() : () => onGroup?.(), hide: !groupId && !onGroup },
       { label: '删除', action: onDelete, danger: true },
@@ -167,6 +170,54 @@ function CanvasInner({ data, projectId }: { data: StudioData; projectId: string 
   const [itemGroups, setItemGroups] = useState<Record<string, string>>(data.itemGroups);
   const { screenToFlowPosition, fitView, setCenter } = useReactFlow();
 
+  // 服务端数据变化时（如 worker 生成完成后 router.refresh()）合并内容字段：
+  // kind/url/mediaId/text 跟随服务端，坐标/尺寸保留本地值，避免和拖动状态打架。
+  useEffect(() => {
+    const serverById = new Map(data.canvasItems.map((it) => [it.id, it]));
+    setItems((prev) => {
+      let changed = false;
+      const next = prev.map((local) => {
+        const remote = serverById.get(local.id);
+        if (!remote) return local;
+        if (
+          remote.kind === local.kind &&
+          remote.url === local.url &&
+          remote.mediaId === local.mediaId &&
+          remote.text === local.text
+        ) {
+          return local;
+        }
+        changed = true;
+        return { ...local, kind: remote.kind, url: remote.url, mediaId: remote.mediaId, text: remote.text };
+      });
+      // 服务端新增的节点（如导入布局）直接追加
+      const added = data.canvasItems.filter((it) => !prev.some((p) => p.id === it.id));
+      if (!changed && added.length === 0) return prev;
+      return added.length > 0 ? [...next, ...added] : next;
+    });
+  }, [data.canvasItems]);
+
+  /* ------------------------------ 画布内 AI 生成 ------------------------------ */
+
+  // 生成中标记，用于禁用按钮 & 节点显示"生成中"
+  const [generating, setGenerating] = useState(false);
+
+  const handleGenerateImages = useCallback(
+    async (itemIds: string[]) => {
+      if (itemIds.length === 0) return;
+      setGenerating(true);
+      try {
+        const result = await generateCanvasItemsAction(projectId, itemIds);
+        if (!result.ok) {
+          alert(result.error ?? '提交生成失败');
+        }
+      } finally {
+        setGenerating(false);
+      }
+    },
+    [projectId],
+  );
+
   const buildNodes = useCallback(
     (): Node[] =>
       items.map((item) => ({
@@ -189,6 +240,7 @@ function CanvasInner({ data, projectId }: { data: StudioData; projectId: string 
             const result = await bringCanvasItemToFrontAction(item.id);
             if (result.ok && result.data) setItems((prev) => prev.map((it) => (it.id === item.id ? result.data! : it)).sort((a, b) => a.z - b.z));
           },
+          onGenerate: (ids: string[]) => void handleGenerateImages(ids),
           onGroup: () => setSelectedIds((prev) => (prev.includes(item.id) ? prev : [...prev, item.id])),
           onUngroup: async () => {
             const gid = itemGroups[item.id];
@@ -207,7 +259,7 @@ function CanvasInner({ data, projectId }: { data: StudioData; projectId: string 
         draggable: true,
         type: 'default',
       })) as Node[],
-    [items, itemGroups],
+    [items, itemGroups, handleGenerateImages],
   );
 
   // 关键：nodes 由 ReactFlow 自管状态，拖动时实时更新位置，不会被 items 旧值覆盖
@@ -256,10 +308,13 @@ function CanvasInner({ data, projectId }: { data: StudioData; projectId: string 
 
   const allNodes = [...groupNodes, ...rfNodes];
 
-  // 仅在节点数量变化（新建/删除）时重建，拖动中的位置由 ReactFlow 内部维护
+  // 节点数量或内容变化（新建/删除/生成完成）时重建，拖动中的位置由 ReactFlow 内部维护
+  const itemContentKey = items
+    .map((it) => `${it.id}:${it.kind}:${it.url ?? ''}:${it.mediaId ?? ''}:${it.text.slice(0, 40)}`)
+    .join('|');
   useEffect(() => {
     setRfNodes(buildNodes());
-  }, [items.length, setRfNodes, buildNodes]);
+  }, [items.length, itemContentKey, setRfNodes, buildNodes]);
 
   // 拖入连线（持久化到数据库）
   const onConnect = useCallback(
@@ -726,6 +781,20 @@ function CanvasInner({ data, projectId }: { data: StudioData; projectId: string 
             title="框选多个素材后打包成场景卡片"
           >
             🎬 成组{selectedIds.length > 1 ? ` (${selectedIds.length})` : ''}
+          </button>
+          <button
+            type="button"
+            onClick={() =>
+              void handleGenerateImages(
+                selectedIds.length > 0 ? selectedIds : items.filter((it) => it.kind === 'text' && it.text.trim()).map((it) => it.id),
+              )
+            }
+            disabled={locked || generating}
+            className="rounded-lg px-2.5 py-1 text-[11px] text-amber-300 transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
+            title={selectedIds.length > 0 ? '为选中的节点生成图片（文字 → 图片）' : '把画布上的文字节点批量生成图片'}
+          >
+            {generating ? '⏳ 生成中…' : '✨ 生成图片'}
+            {selectedIds.length > 0 ? ` (${selectedIds.length})` : ''}
           </button>
           <button
             type="button"

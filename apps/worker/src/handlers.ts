@@ -5,6 +5,7 @@ import {
   failShotVideo,
   finishShotVideo,
   generateAssetImage,
+  generateCanvasItemImage,
   generateShotFirstFrame,
   probeProvider,
   renderTimeline,
@@ -223,11 +224,37 @@ const handleProviderProbe: Handler = async ({ job }) => {
   return { ...(await probeProvider(providerId)) };
 };
 
+/** 画布节点直接生成图片（文字 → 图片，生成结果回填到节点） */
+const handleCanvasGenerate: Handler = async ({ job, progress, log, isCanceled }) => {
+  const { canvasItemIds, aspectRatio } = job.payload as { canvasItemIds: string[]; aspectRatio?: string };
+  const ids = canvasItemIds ?? [];
+  if (ids.length === 0) throw new Error('没有需要生成的画布素材');
+  const results: Array<{ itemId: string; ok: boolean; error?: string }> = [];
+  let done = 0;
+  for (const itemId of ids) {
+    if (isCanceled()) break;
+    try {
+      await generateCanvasItemImage(itemId, { aspectRatio });
+      results.push({ itemId, ok: true });
+      log(`画布素材 ${itemId} 生成完成`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      results.push({ itemId, ok: false, error: message });
+      log(`画布素材 ${itemId} 生成失败：${message}`, 'warn');
+    }
+    done += 1;
+    progress(Math.round((done / ids.length) * 100), `已完成 ${done}/${ids.length} 个画布素材`);
+  }
+  const succeeded = results.filter((r) => r.ok).length;
+  return { total: ids.length, succeeded, failed: results.length - succeeded, results };
+};
+
 export const HANDLERS: Record<string, Handler> = {
   'image.generate': handleImageGenerate,
   'asset.prepare': handleAssetPrepare,
   'video.generate': handleVideoGenerate,
   'shot.batchGenerate': handleShotBatch,
+  'canvas.generate': handleCanvasGenerate,
   'timeline.render': handleTimelineRender,
   'agent.run': handleAgentRun,
   'text.generate': handleTextGenerate,

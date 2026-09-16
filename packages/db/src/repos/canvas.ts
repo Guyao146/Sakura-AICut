@@ -102,10 +102,11 @@ export function listCanvasItems(projectId: ID): CanvasItem[] {
 export function updateCanvasItem(
   id: ID,
   patch: Partial<
-    Pick<CanvasItem, 'text' | 'x' | 'y' | 'width' | 'height' | 'z' | 'rotation' | 'mediaId' | 'url'>
+    Pick<CanvasItem, 'kind' | 'text' | 'x' | 'y' | 'width' | 'height' | 'z' | 'rotation' | 'mediaId' | 'url'>
   >,
 ): CanvasItem {
   const fields: Record<string, unknown> = {};
+  if (patch.kind !== undefined) fields.kind = patch.kind;
   if (patch.text !== undefined) fields.text = patch.text;
   if (patch.x !== undefined) fields.x = patch.x;
   if (patch.y !== undefined) fields.y = patch.y;

@@ -10,6 +10,7 @@ export type JobType =
   | 'video.generate'
   | 'asset.prepare'
   | 'shot.batchGenerate'
+  | 'canvas.generate'
   | 'timeline.render'
   | 'agent.run'
   | 'provider.probe';
@@ -20,6 +21,7 @@ export const JOB_TYPE_LABELS: Record<JobType, string> = {
   'video.generate': '视频生成',
   'asset.prepare': '资产准备',
   'shot.batchGenerate': '批量分镜生成',
+  'canvas.generate': '画布素材生成',
   'timeline.render': '时间线合成',
   'agent.run': 'Agent 执行',
   'provider.probe': '供应商连通性检测',

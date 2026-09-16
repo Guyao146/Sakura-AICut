@@ -22,13 +22,14 @@ export function MediaLibraryPanel({
   onItemAdded,
   onExporting,
 }: MediaLibraryPanelProps) {
-  const [filter, setFilter] = useState<'all' | 'image' | 'video' | 'audio'>('all');
+  const [filter, setFilter] = useState<'all' | 'image' | 'video' | 'audio' | 'canvas'>('all');
   const [loading, setLoading] = useState(false);
   const [duration, setDuration] = useState(10);
   const [showExportPanel, setShowExportPanel] = useState(false);
 
   const items = Object.values(media).filter((m) => {
     if (filter === 'all') return true;
+    if (filter === 'canvas') return m.ownerType === 'canvas';
     return m.kind === filter;
   });
 
@@ -118,8 +119,8 @@ export function MediaLibraryPanel({
         </div>
       )}
 
-      <div className="flex gap-1.5">
-        {(['all', 'image', 'video', 'audio'] as const).map((kind) => (
+      <div className="flex gap-1.5 flex-wrap">
+        {(['all', 'image', 'video', 'audio', 'canvas'] as const).map((kind) => (
           <button
             key={kind}
             onClick={() => setFilter(kind)}
@@ -130,13 +131,21 @@ export function MediaLibraryPanel({
                 : 'bg-white/5 border-[#333b4a] text-slate-400 hover:bg-white/10',
             )}
           >
-            {kind === 'all' ? '全部' : kind === 'image' ? '图片' : kind === 'video' ? '视频' : '语音'}
+            {kind === 'all' ? '全部' : kind === 'image' ? '图片' : kind === 'video' ? '视频' : kind === 'audio' ? '语音' : '✨ 画布生成'}
           </button>
         ))}
       </div>
 
       {items.length === 0 ? (
-        <Empty text={filter === 'all' ? '项目暂无素材' : `暂无${filter === 'image' ? '图片' : filter === 'video' ? '视频' : '语音'}`} />
+        <Empty
+          text={
+            filter === 'all'
+              ? '项目暂无素材'
+              : filter === 'canvas'
+                ? '画布还没有生成的素材，右键文字节点选「✨ 生成图片」'
+                : `暂无${filter === 'image' ? '图片' : filter === 'video' ? '视频' : '语音'}`
+          }
+        />
       ) : (
         <div className="grid grid-cols-2 gap-2 max-h-[300px] overflow-y-auto">
           {items.map((item) => (
@@ -174,6 +183,12 @@ export function MediaLibraryPanel({
                   +添加
                 </Badge>
               </div>
+
+              {item.ownerType === 'canvas' && (
+                <span className="absolute top-1 left-1 rounded bg-amber-500/80 px-1 py-0.5 text-[9px] font-medium text-black">
+                  画布生成
+                </span>
+              )}
 
               <div className="text-[10px] text-slate-500 truncate p-1 bg-[#0e1116]">{item.prompt?.slice(0, 20) || 'media'}</div>
             </div>

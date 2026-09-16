@@ -79,6 +79,22 @@ export function enqueueTimelineRender(projectId: string, options: { includeSubti
   });
 }
 
+export function enqueueCanvasGenerate(input: {
+  projectId: string;
+  canvasItemIds: string[];
+  aspectRatio?: string;
+}): Job {
+  return createJob({
+    type: 'canvas.generate',
+    projectId: input.projectId,
+    payload: { canvasItemIds: input.canvasItemIds, aspectRatio: input.aspectRatio },
+    targetType: 'project',
+    targetId: input.projectId,
+    stageLabel: `排队生成 ${input.canvasItemIds.length} 个画布素材`,
+    priority: 5,
+  });
+}
+
 export function enqueueAgentPlan(projectId: string, planId: string, autoApprove: boolean): Job {
   return createJob({
     type: 'agent.run',

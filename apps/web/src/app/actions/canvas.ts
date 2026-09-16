@@ -25,6 +25,7 @@ import {
 import type { CanvasItem, CanvasEdge, CanvasGroup, CanvasItemKind } from '@sakura/core';
 import { CANVAS_TEMPLATES } from '@sakura/core';
 import type { ActionResult } from './project';
+import { enqueueCanvasGenerate } from '@/lib/server/jobs';
 
 /**
  * 无限画布素材相关 Server Actions
@@ -64,7 +65,7 @@ export async function createCanvasItemAction(
 
 export async function updateCanvasItemAction(
   itemId: string,
-  patch: Partial<Pick<CanvasItem, 'text' | 'x' | 'y' | 'width' | 'height' | 'z' | 'rotation'>>,
+  patch: Partial<Pick<CanvasItem, 'kind' | 'text' | 'x' | 'y' | 'width' | 'height' | 'z' | 'rotation' | 'mediaId' | 'url'>>,
 ): Promise<ActionResult<CanvasItem>> {
   try {
     const item = getCanvasItem(itemId);
@@ -330,6 +331,27 @@ export async function importShotsToCanvasAction(
     }
     refresh(projectId);
     return { ok: true, data: created };
+  } catch (error) {
+    return toError(error);
+  }
+}
+
+/* ------------------------------ 画布内 AI 生成 ------------------------------ */
+
+/**
+ * 画布节点直接生成图片（入队，由 worker 执行）：
+ * 以节点文本为提示词生成图片，生成结果回填到该节点。
+ */
+export async function generateCanvasItemsAction(
+  projectId: string,
+  itemIds: string[],
+  options: { aspectRatio?: string } = {},
+): Promise<ActionResult<{ jobId: string; count: number }>> {
+  try {
+    if (itemIds.length === 0) throw new Error('请先选择要生成的节点');
+    const job = enqueueCanvasGenerate({ projectId, canvasItemIds: itemIds, aspectRatio: options.aspectRatio });
+    refresh(projectId);
+    return { ok: true, data: { jobId: job.id, count: itemIds.length } };
   } catch (error) {
     return toError(error);
   }

@@ -8,5 +8,6 @@ export * from './ai';
 export * from './storage';
 export * from './generate';
 export * from './media';
+export * from './canvas';
 export * from './timeline';
 export * from './assistant';

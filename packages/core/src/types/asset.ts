@@ -47,8 +47,8 @@ export interface MediaFile extends Timestamps {
   providerId?: ID | null;
   jobId?: ID | null;
   seed?: number | null;
-  /** 归属：资产 / 镜头 / 时间线 */
-  ownerType: 'asset' | 'shot' | 'project' | 'timeline' | 'upload';
+  /** 归属：资产 / 镜头 / 时间线 / 画布素材 */
+  ownerType: 'asset' | 'shot' | 'project' | 'timeline' | 'upload' | 'canvas';
   ownerId?: ID | null;
   isFavorite?: boolean;
 }
