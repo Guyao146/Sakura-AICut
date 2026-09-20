@@ -55,6 +55,9 @@ body {
 /* ---------- 节点白框修复：缩放手柄/选中框适配暗色樱花主题 ---------- */
 /* 注意：@xyflow/react 的样式表在本文件之后加载，同优先级下会覆盖，因此关键属性用 !important 提权 */
 .react-flow__resize-control.handle {
+  width: 10px !important;
+  height: 10px !important;
+  touch-action: none;
   border: 1px solid var(--color-ink-900) !important;
   border-radius: 4px !important;
   background-color: var(--color-sakura-500) !important;
@@ -76,13 +79,12 @@ body {
 }
 /* 节点本体：去掉 xyflow 对 default/group/input/output 类型的内置主题
    （白底 #fff + 深色边框 + padding:10px + width:150px + 3px 圆角），
-   节点外观完全交给 CanvasItemNode / GroupNode 内层卡片自行渲染 */
+   节点外观交给内层卡片，宽高保留 React Flow 的内联尺寸，以支持拖拽缩放 */
 .react-flow__node-default,
 .react-flow__node-input,
 .react-flow__node-output,
 .react-flow__node-group {
   padding: 0 !important;
-  width: auto !important;
   border: none !important;
   background-color: transparent !important;
   border-radius: 0 !important;

@@ -106,6 +106,8 @@ export function CanvasInspector({
         <div>分组：<span className="text-slate-200">{groupName ? '有' : '无'}</span></div>
       </div>
 
+      <p className="mb-3 text-[10px] text-slate-500">拖拽节点四角或边框调整大小，松手自动保存。</p>
+
       <div className="flex flex-wrap gap-1.5">
         <Button size="sm" variant="default" onClick={() => void onBringToFront()}>
           ⬆ 置顶

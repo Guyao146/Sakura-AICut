@@ -14,7 +14,9 @@ import {
   type Edge,
   type Node,
   type NodeChange,
+  type OnResizeEnd,
   type OnSelectionChangeParams,
+  type ResizeParams,
   useEdgesState,
   useNodesState,
   useReactFlow,
@@ -67,6 +69,7 @@ interface CanvasItemNodeData {
   item: CanvasItem;
   groupId?: string | null;
   onUpdate: (patch: Partial<CanvasItem>) => Promise<void>;
+  onResizeEnd: (params: ResizeParams) => void;
   onDelete: () => Promise<void>;
   onBringToFront: () => Promise<void>;
   onGenerate?: (itemIds: string[]) => void;
@@ -102,6 +105,7 @@ function CanvasItemNode({ data, selected }: { data: CanvasItemNodeData; selected
     item,
     groupId,
     onUpdate,
+    onResizeEnd,
     onDelete,
     onBringToFront,
     onGenerate,
@@ -125,6 +129,7 @@ function CanvasItemNode({ data, selected }: { data: CanvasItemNodeData; selected
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const mention = useMentionTrigger(text, caret);
   const [mentionAnchor, setMentionAnchor] = useState<{ x: number; y: number } | null>(null);
+  const handleResizeEnd = useCallback<OnResizeEnd>((_, params) => onResizeEnd(params), [onResizeEnd]);
 
   const handleSaveText = async () => {
     if (text !== item.text) await onUpdate({ text });
@@ -252,7 +257,7 @@ function CanvasItemNode({ data, selected }: { data: CanvasItemNodeData; selected
   return (
     <div
       className={clsx(
-        'node-lift relative rounded-xl border bg-[#12151c] p-2 shadow-lg shadow-black/40 h-full w-full',
+        'node-lift relative flex h-full w-full min-w-0 flex-col rounded-xl border bg-[#12151c] p-2 shadow-lg shadow-black/40',
         selected
           ? 'border-pink-400/60 ring-1 ring-pink-400/40'
           : 'border-[#2b3240] hover:border-pink-400/30',
@@ -266,8 +271,8 @@ function CanvasItemNode({ data, selected }: { data: CanvasItemNodeData; selected
     >
       <Handle type="target" position={Position.Left} className="!w-2.5 !h-2.5 !bg-pink-400 !border-none !opacity-60 hover:!opacity-100" />
       <Handle type="source" position={Position.Right} className="!w-2.5 !h-2.5 !bg-pink-400 !border-none !opacity-60 hover:!opacity-100" />
-      <NodeResizer minWidth={80} minHeight={60} isVisible={selected} />
-      <div className="mb-1 flex items-center gap-1.5 pointer-events-none">
+      <NodeResizer minWidth={80} minHeight={60} isVisible={selected} onResizeEnd={handleResizeEnd} />
+      <div className="mb-1 flex min-w-0 shrink-0 items-center gap-1.5 overflow-hidden pointer-events-none">
         <Badge tone={item.kind === 'text' ? 'default' : 'pink'}>{CANVAS_ITEM_KIND_LABELS[item.kind]}</Badge>
         {item.role && item.role !== 'plain' ? (
           <span className="text-[10px] text-cyan-300/90" title={CANVAS_NODE_ROLE_LABELS[item.role]}>
@@ -299,7 +304,7 @@ function CanvasItemNode({ data, selected }: { data: CanvasItemNodeData; selected
               setMentionAnchor({ x: rect.left, y: rect.bottom + 4 });
             }}
             onBlur={handleSaveText}
-            className="w-full h-[calc(100%-24px)] text-xs bg-[#0e1116] border border-pink-400/40 rounded px-1 py-0.5 resize-none"
+            className="nodrag nowheel min-h-0 w-full flex-1 text-xs bg-[#0e1116] border border-pink-400/40 rounded px-1 py-0.5 resize-none"
           />
           {mention.query !== null && mentionAnchor ? (
             <MentionPopup
@@ -319,21 +324,23 @@ function CanvasItemNode({ data, selected }: { data: CanvasItemNodeData; selected
           ) : null}
         </>
       ) : item.kind === 'text' ? (
-        <div className="text-xs text-slate-300 whitespace-pre-wrap break-words overflow-hidden">{item.text || '（空）'}</div>
+        <div className="nowheel min-h-0 flex-1 overflow-auto text-xs text-slate-300 whitespace-pre-wrap break-words">{item.text || '（空）'}</div>
       ) : item.kind === 'image' && item.url ? (
-        <div className="relative w-full overflow-hidden rounded bg-[#0e1116]">
+        <div className="relative min-h-0 w-full flex-1 overflow-hidden rounded bg-[#0e1116]">
           <div className="skeleton-shimmer absolute inset-0 h-full w-full rounded" />
-          <img src={item.url} alt={item.text} loading="lazy" className="relative w-full h-auto rounded object-cover" />
+          <img src={item.url} alt={item.text} loading="lazy" draggable={false} className="relative h-full w-full rounded object-contain" />
         </div>
       ) : item.kind === 'video' && item.url ? (
-        <div className="relative w-full overflow-hidden rounded bg-[#0e1116]">
+        <div className="relative min-h-0 w-full flex-1 overflow-hidden rounded bg-[#0e1116]">
           <div className="skeleton-shimmer absolute inset-0 h-full w-full rounded" />
-          <video src={item.url} className="relative w-full h-auto rounded object-cover" />
+          <video src={item.url} className="relative h-full w-full rounded object-contain" />
         </div>
       ) : item.kind === 'audio' && item.url ? (
-        <audio src={item.url} controls className="w-full text-xs" />
+        <div className="flex min-h-0 flex-1 items-center overflow-hidden">
+          <audio src={item.url} controls className="nodrag nowheel max-h-full min-w-0 w-full text-xs" />
+        </div>
       ) : (
-        <div className="text-[11px] text-slate-500">{item.text}</div>
+        <div className="nowheel min-h-0 flex-1 overflow-auto text-[11px] text-slate-500">{item.text}</div>
       )}
     </div>
   );
@@ -484,6 +491,21 @@ function CanvasInner({ data, projectId }: { data: StudioData; projectId: string 
             const result = await updateCanvasItemAction(item.id, patch);
             if (result.ok && result.data) setItems((prev) => prev.map((it) => (it.id === item.id ? result.data! : it)));
           },
+          onResizeEnd: (params: ResizeParams) => {
+            const { width, height, x, y } = params;
+            const patch = {
+              width: Math.round(Math.max(80, width)),
+              height: Math.round(Math.max(60, height)),
+              x: Math.round(x),
+              y: Math.round(y),
+            };
+            setItems((prev) => prev.map((it) => (it.id === item.id ? { ...it, ...patch } : it)));
+            // 保留节点对象身份（含 selected 等内部字段），仅更新位置，避免缩放结束时选中状态被重置
+            setRfNodes((prev) =>
+              prev.map((node) => (node.id === item.id ? { ...node, position: { x: patch.x, y: patch.y } } : node)),
+            );
+            updateCanvasItemAction(item.id, patch).catch(console.error);
+          },
           onDelete: async () => {
             const result = await deleteCanvasItemAction(item.id);
             if (result.ok) {
@@ -575,7 +597,9 @@ function CanvasInner({ data, projectId }: { data: StudioData; projectId: string 
           }),
         } as Record<string, unknown>,
         position: { x: item.x, y: item.y },
-        style: { width: Math.max(80, item.width || 200), height: Math.max(60, item.height || 120), zIndex: item.z },
+        width: Math.max(80, item.width || 200),
+        height: Math.max(60, item.height || 120),
+        style: { zIndex: item.z },
         draggable: true,
         type: 'default',
       })) as Node[],
@@ -640,13 +664,18 @@ function CanvasInner({ data, projectId }: { data: StudioData; projectId: string 
   // 连线、选中状态等变化不应导致 React Flow 重新同步整个节点数组。
   const allNodes = useMemo(() => [...groupNodes, ...rfNodes], [groupNodes, rfNodes]);
 
-  // 节点数量或内容变化（新建/删除/生成完成）时重建，拖动中的位置由 ReactFlow 内部维护
+  // 节点数量或内容变化（新建/删除/生成完成）时重建，拖动/缩放中的位置与尺寸由 ReactFlow 内部维护
   const itemContentKey = items
     .map((it) => `${it.id}:${it.kind}:${it.url ?? ''}:${it.mediaId ?? ''}:${it.text.slice(0, 40)}`)
     .join('|');
+  // buildNodes 的引用随 items 变化，但缩放只会改 width/height/x/y（不影响 contentKey），
+  // 因此这里只认 contentKey/数量，避免把刚缩放完的节点重建掉、丢失 selected 状态。
+  const buildNodesRef = useRef(buildNodes);
+  buildNodesRef.current = buildNodes;
   useEffect(() => {
-    setRfNodes(buildNodes());
-  }, [items.length, itemContentKey, setRfNodes, buildNodes]);
+    setRfNodes(buildNodesRef.current());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items.length, itemContentKey, setRfNodes]);
 
   // 拖入连线（持久化到数据库）
   const onConnect = useCallback(
@@ -1086,7 +1115,8 @@ function CanvasInner({ data, projectId }: { data: StudioData; projectId: string 
         setItems((prev) => prev.filter((it) => it.id !== nodeId));
         deleteCanvasItemAction(nodeId).catch(console.error);
       } else if (change.type === 'dimensions' && change.dimensions && change.resizing === false) {
-        // 缩放结束时同步尺寸到本地状态与数据库
+        // 尺寸兜底：NodeResizer 的 onResizeEnd 已写入最终尺寸/位置；
+        // 这里覆盖节点被自动测量等场景，重复写同一组值无副作用。
         const nodeId = change.id;
         const w = Math.max(80, change.dimensions.width);
         const h = Math.max(60, change.dimensions.height);
@@ -1112,6 +1142,7 @@ function CanvasInner({ data, projectId }: { data: StudioData; projectId: string 
         nodesDraggable={!locked}
         nodesConnectable={!locked}
         elementsSelectable={!locked}
+        nodesFocusable={!locked}
         zoomOnScroll={!locked}
         panOnScroll={!locked}
         minZoom={0.1}
