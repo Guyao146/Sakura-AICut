@@ -1,4 +1,4 @@
-import type { TaskStatus } from '../types/common';
+import type { Language, TaskStatus } from '../types/common';
 import type { ProviderCredentials, ProviderProtocol } from '../types/provider';
 
 /**
@@ -87,6 +87,39 @@ export interface VideoGenerateRequest {
   params?: Record<string, unknown>;
 }
 
+export interface AudioGenerateRequest {
+  model: string;
+  /** 要合成的文本（台词 / 旁白 / 音效描述） */
+  input: string;
+  /** 音色 ID 或名称（openai: alloy/echo/fable/onyx/nova/shimmer；各供应商自定义） */
+  voice?: string;
+  /** 合成语言（一键出海：20 种语言） */
+  language?: Language;
+  /** 语速 0.25-4.0，默认 1.0 */
+  speed?: number;
+  /** 音调（部分供应商支持） */
+  pitch?: number;
+  /** 音量 0-2，默认 1.0 */
+  volume?: number;
+  /** 输出格式 */
+  format?: 'mp3' | 'wav' | 'aac' | 'flac' | 'opus';
+  /** 参考音频（声音克隆 / 音色模仿，URL 或 data URI） */
+  referenceAudio?: string;
+  params?: Record<string, unknown>;
+}
+
+export interface AudioGenerateResult {
+  /** 可直接下载的音频 URL */
+  url?: string;
+  /** base64 音频（供应商直接返回二进制时由适配器转成） */
+  b64?: string;
+  /** 采样格式，用于落盘扩展名 */
+  format?: string;
+  durationSec?: number;
+  model?: string;
+  raw?: unknown;
+}
+
 export interface AsyncTaskHandle {
   /** 供应商侧任务 ID */
   taskId: string;
@@ -125,6 +158,18 @@ export interface ProbeResult {
   latencyMs?: number;
 }
 
+/** 供应商余额查询结果（尽力而为，不支持时返回 null） */
+export interface BalanceResult {
+  /** 剩余额度 */
+  balance?: number;
+  /** 已用额度 */
+  used?: number;
+  currency?: string;
+  /** 展示给用户的原始文本 */
+  detail?: string;
+  raw?: unknown;
+}
+
 /** 适配器运行时上下文 */
 export interface AdapterContext {
   /** 供应商 ID（用于日志） */
@@ -145,6 +190,8 @@ export interface ProviderAdapter {
   label: string;
   chat(ctx: AdapterContext, req: TextGenerateRequest): Promise<TextGenerateResult>;
   image?(ctx: AdapterContext, req: ImageGenerateRequest): Promise<ImageGenerateResult>;
+  /** 语音合成 / 音乐生成（同步返回音频） */
+  audio?(ctx: AdapterContext, req: AudioGenerateRequest): Promise<AudioGenerateResult>;
   /** 异步视频：提交任务 */
   submitVideo?(ctx: AdapterContext, req: VideoGenerateRequest): Promise<AsyncTaskHandle>;
   /** 异步视频：查询任务 */
@@ -153,4 +200,6 @@ export interface ProviderAdapter {
   cancelVideo?(ctx: AdapterContext, taskId: string): Promise<void>;
   /** 连通性检测 */
   probe(ctx: AdapterContext): Promise<ProbeResult>;
+  /** 余额查询（不支持的服务商可省略，调用方会显示「暂不支持」） */
+  fetchBalance?(ctx: AdapterContext): Promise<BalanceResult | null>;
 }

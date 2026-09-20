@@ -35,5 +35,72 @@ export function isTerminal(status: TaskStatus): boolean {
   return TERMINAL_STATUSES.includes(status);
 }
 
-/** 内容分级 / 语言 */
-export type Language = 'zh-CN' | 'en-US' | 'ja-JP' | 'ko-KR';
+/** 内容分级 / 语言（配音模型常用 20 语言，覆盖一键出海场景） */
+export type Language =
+  | 'zh-CN'
+  | 'en-US'
+  | 'ja-JP'
+  | 'ko-KR'
+  | 'fr-FR'
+  | 'de-DE'
+  | 'es-ES'
+  | 'pt-BR'
+  | 'it-IT'
+  | 'ru-RU'
+  | 'ar-SA'
+  | 'hi-IN'
+  | 'th-TH'
+  | 'vi-VN'
+  | 'id-ID'
+  | 'ms-MY'
+  | 'tr-TR'
+  | 'nl-NL'
+  | 'pl-PL'
+  | 'uk-UA';
+
+export const LANGUAGE_LABELS: Record<Language, string> = {
+  'zh-CN': '中文',
+  'en-US': 'English',
+  'ja-JP': '日本語',
+  'ko-KR': '한국어',
+  'fr-FR': 'Français',
+  'de-DE': 'Deutsch',
+  'es-ES': 'Español',
+  'pt-BR': 'Português',
+  'it-IT': 'Italiano',
+  'ru-RU': 'Русский',
+  'ar-SA': 'العربية',
+  'hi-IN': 'हिन्दी',
+  'th-TH': 'ไทย',
+  'vi-VN': 'Tiếng Việt',
+  'id-ID': 'Bahasa Indonesia',
+  'ms-MY': 'Bahasa Melayu',
+  'tr-TR': 'Türkçe',
+  'nl-NL': 'Nederlands',
+  'pl-PL': 'Polski',
+  'uk-UA': 'Українська',
+};
+
+/** 配音语言选项（下拉用） */
+export const LANGUAGE_OPTIONS: Array<{ value: Language; label: string }> = (
+  Object.keys(LANGUAGE_LABELS) as Language[]
+).map((value) => ({ value, label: LANGUAGE_LABELS[value] }));
+
+/**
+ * 爆款复刻（⑩）：上传参考视频 / 链接，AI 解析爆点后产出新剧本
+ * 输入侧增强，对齐小云雀「爆款复刻」入口。
+ */
+export interface ReplicateAnalysis {
+  /** 解析出的爆款 DNA：为什么火 */
+  hooks: string[];
+  /** 文案结构（开头钩子 / 正文 / 结尾） */
+  structure: string;
+  /** 剧情框架摘要 */
+  plot: string;
+  /** 配乐与画风判断 */
+  styleNotes: string;
+  /** 拆解出的可复用分镜建议 */
+  shotIdeas: string[];
+  /** 据此生成的新剧本大纲 */
+  outline: string;
+}

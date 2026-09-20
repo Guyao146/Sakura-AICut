@@ -10,6 +10,8 @@ export * from './repos/jobs';
 export * from './repos/agent';
 export * from './repos/canvas';
 export * from './repos/canvas-groups';
+export * from './repos/screenplay-versions';
+export * from './repos/redraws';
 export * from './snapshot';
 
 import { getProjectWithContent } from './snapshot';

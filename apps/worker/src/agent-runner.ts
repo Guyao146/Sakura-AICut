@@ -11,6 +11,7 @@ import {
 } from '@sakura/core';
 import {
   addTurn,
+  createCanvasItem,
   getAsset,
   getPlan,
   getProject,
@@ -25,15 +26,21 @@ import {
   upsertScreenplay,
 } from '@sakura/db';
 import {
+  analyzeReference,
+  applyCanvasLayout,
   buildTimelineFromShots,
   checkShotVideo,
   failShotVideo,
   finishShotVideo,
   generateAssetImage,
+  generateCanvasItemsImage,
   generateScreenplay,
+  organizeCanvas,
   planAssetsFromScreenplay,
+  planShotPreview,
   planShotsFromScreenplay,
   renderTimeline,
+  runShotPreview,
   runText,
   submitShotVideo,
 } from '@sakura/pipeline';
@@ -315,6 +322,64 @@ async function executeAgentTool(
     case 'asset.plan': {
       const assets = planAssetsFromScreenplay(projectId, { instructions: str('instructions') });
       return { count: assets.length, assets: assets.map((asset) => `${asset.type}:${asset.name}`) };
+    }
+
+    /* ---------- 面向 Agent 的画布（Agent 可读写画布状态） ---------- */
+
+    case 'canvas.create_item': {
+      const kind = (str('kind') ?? 'text') as 'text' | 'image' | 'video';
+      const text = str('text') ?? '';
+      const role = (str('role') ?? 'plain') as 'plain' | 'character' | 'scene' | 'prop';
+      const item = createCanvasItem({
+        projectId,
+        kind,
+        text,
+        x: num('x') ?? Math.round(Math.random() * 600),
+        y: num('y') ?? Math.round(Math.random() * 400),
+        width: kind === 'text' ? 240 : 320,
+        height: kind === 'text' ? 120 : 320,
+        role,
+        refId: str('refId') ?? null,
+      });
+      return { itemId: item.id, kind, role };
+    }
+
+    case 'canvas.generate_image': {
+      const itemIds = Array.isArray(args.itemIds) ? (args.itemIds as string[]) : [];
+      if (itemIds.length === 0) throw new Error('请指定要生成的画布节点 ID');
+      const results = await generateCanvasItemsImage(itemIds, {});
+      return {
+        total: results.length,
+        succeeded: results.filter((item) => item.ok).length,
+        failed: results.filter((item) => !item.ok).length,
+      };
+    }
+
+    case 'canvas.organize': {
+      const mode = (str('mode') ?? 'tree-h') as 'tree-h' | 'tree-v' | 'by-role';
+      const layout = organizeCanvas(projectId, mode);
+      applyCanvasLayout(layout);
+      return { mode, count: layout.length };
+    }
+
+    /* ---------- 流程层新工具 ---------- */
+
+    case 'shot.preview': {
+      const shotIds = Array.isArray(args.shotIds) ? (args.shotIds as string[]) : undefined;
+      const plan = planShotPreview(projectId, shotIds);
+      const results = await runShotPreview(plan, { projectId });
+      return {
+        shots: plan.shotIds.length,
+        succeeded: results.filter((item) => item.ok).length,
+        failed: results.filter((item) => !item.ok).length,
+      };
+    }
+
+    case 'replicate.analyze': {
+      const reference = str('reference');
+      if (!reference) throw new Error('请提供参考视频链接或文案');
+      const analysis = await analyzeReference(reference, { keepStyle: args.keepStyle === undefined ? true : bool('keepStyle') });
+      return { hooks: analysis.hooks.length, outline: analysis.outline.slice(0, 120) };
     }
   }
 

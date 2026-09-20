@@ -103,3 +103,22 @@ export interface AgentChatMessage extends Timestamps {
   model?: string | null;
   createdAtAt?: ISODateTime;
 }
+
+/**
+ * 剧本版本（剧本助手版本管理）
+ * 每次剧本助手落稿一版就存一条，可随时回滚或对比。
+ */
+export interface ScreenplayVersion extends Timestamps {
+  id: ID;
+  projectId: ID;
+  /** 版本号（1 起，递增） */
+  version: number;
+  /** 版本标题，例如「v3 · 增加反转」 */
+  title: string;
+  /** 该版本的剧本文本快照 */
+  raw: string;
+  /** 结构化数据快照（characters/locations/props/beats） */
+  dataJson: string;
+  /** 来源：AI 对话落稿 / 手动保存 / 回滚产生 */
+  source: 'ai' | 'manual' | 'rollback';
+}

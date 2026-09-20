@@ -1,4 +1,4 @@
-import type { CanvasItem, CanvasItemKind, ID } from '@sakura/core';
+import type { CanvasItem, CanvasItemKind, CanvasItemVariant, CanvasNodeRole, ID } from '@sakura/core';
 import { createId } from '@sakura/core';
 import { buildUpdate, getDb, nowIso } from '../client';
 
@@ -20,11 +20,22 @@ interface CanvasItemRow {
   height: number;
   z: number;
   rotation: number;
+  role: string;
+  ref_id: string | null;
+  voice_ref_media_id: string | null;
+  variants_json: string;
   created_at: string;
   updated_at: string;
 }
 
 function mapItem(row: CanvasItemRow): CanvasItem {
+  let variants: CanvasItemVariant[] = [];
+  try {
+    const parsed = JSON.parse(row.variants_json || '[]');
+    if (Array.isArray(parsed)) variants = parsed as CanvasItemVariant[];
+  } catch {
+    variants = [];
+  }
   return {
     id: row.id,
     projectId: row.project_id,
@@ -38,6 +49,10 @@ function mapItem(row: CanvasItemRow): CanvasItem {
     height: row.height,
     z: row.z,
     rotation: row.rotation,
+    role: (row.role || 'plain') as CanvasNodeRole,
+    refId: row.ref_id,
+    voiceRefMediaId: row.voice_ref_media_id,
+    variants,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -55,6 +70,10 @@ export interface CreateCanvasItemInput {
   height?: number;
   z?: number;
   rotation?: number;
+  role?: CanvasNodeRole;
+  refId?: ID | null;
+  voiceRefMediaId?: ID | null;
+  variants?: CanvasItemVariant[];
 }
 
 export function createCanvasItem(input: CreateCanvasItemInput): CanvasItem {
@@ -63,8 +82,8 @@ export function createCanvasItem(input: CreateCanvasItemInput): CanvasItem {
   const id = `cv_${createId(12)}`;
   db.prepare(
     `INSERT INTO canvas_items (id, project_id, kind, media_id, url, text, x, y, width, height, z, rotation,
-       created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       role, ref_id, voice_ref_media_id, variants_json, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     id,
     input.projectId,
@@ -78,6 +97,10 @@ export function createCanvasItem(input: CreateCanvasItemInput): CanvasItem {
     input.height ?? 0,
     input.z ?? 0,
     input.rotation ?? 0,
+    input.role ?? 'plain',
+    input.refId ?? null,
+    input.voiceRefMediaId ?? null,
+    JSON.stringify(input.variants ?? []),
     now,
     now,
   );
@@ -99,12 +122,24 @@ export function listCanvasItems(projectId: ID): CanvasItem[] {
   return rows.map(mapItem);
 }
 
-export function updateCanvasItem(
-  id: ID,
-  patch: Partial<
-    Pick<CanvasItem, 'kind' | 'text' | 'x' | 'y' | 'width' | 'height' | 'z' | 'rotation' | 'mediaId' | 'url'>
-  >,
-): CanvasItem {
+export interface UpdateCanvasItemInput {
+  kind?: CanvasItemKind;
+  text?: string;
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
+  z?: number;
+  rotation?: number;
+  mediaId?: ID | null;
+  url?: string | null;
+  role?: CanvasNodeRole;
+  refId?: ID | null;
+  voiceRefMediaId?: ID | null;
+  variants?: CanvasItemVariant[];
+}
+
+export function updateCanvasItem(id: ID, patch: UpdateCanvasItemInput): CanvasItem {
   const fields: Record<string, unknown> = {};
   if (patch.kind !== undefined) fields.kind = patch.kind;
   if (patch.text !== undefined) fields.text = patch.text;
@@ -116,6 +151,10 @@ export function updateCanvasItem(
   if (patch.rotation !== undefined) fields.rotation = patch.rotation;
   if (patch.mediaId !== undefined) fields.media_id = patch.mediaId;
   if (patch.url !== undefined) fields.url = patch.url;
+  if (patch.role !== undefined) fields.role = patch.role;
+  if (patch.refId !== undefined) fields.ref_id = patch.refId;
+  if (patch.voiceRefMediaId !== undefined) fields.voice_ref_media_id = patch.voiceRefMediaId;
+  if (patch.variants !== undefined) fields.variants_json = JSON.stringify(patch.variants);
 
   if (Object.keys(fields).length > 0) {
     const { sql, values } = buildUpdate('canvas_items', id, fields);

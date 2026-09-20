@@ -65,7 +65,12 @@ export async function createCanvasItemAction(
 
 export async function updateCanvasItemAction(
   itemId: string,
-  patch: Partial<Pick<CanvasItem, 'kind' | 'text' | 'x' | 'y' | 'width' | 'height' | 'z' | 'rotation' | 'mediaId' | 'url'>>,
+  patch: Partial<
+    Pick<
+      CanvasItem,
+      'kind' | 'text' | 'x' | 'y' | 'width' | 'height' | 'z' | 'rotation' | 'mediaId' | 'url' | 'role' | 'refId'
+    >
+  >,
 ): Promise<ActionResult<CanvasItem>> {
   try {
     const item = getCanvasItem(itemId);
@@ -121,7 +126,8 @@ export async function createCanvasEdgeAction(
 ): Promise<ActionResult<CanvasEdge | null>> {
   try {
     const edge = createCanvasEdge(projectId, sourceId, targetId, label);
-    refresh(projectId);
+    // 不调用 refresh(projectId)：边的显示由客户端乐观更新（onConnect 已经把真实 id 替换回去），
+    // 全页 revalidate 会触发整页重新编译，在 dev server 状态不佳时导致 “This page couldn’t load”。
     return { ok: true, data: edge };
   } catch (error) {
     return toError(error);
@@ -181,6 +187,7 @@ export async function groupItemsAction(
   projectId: string,
   itemIds: string[],
   name = '未命名场景',
+  color?: string,
 ): Promise<ActionResult<CanvasGroup>> {
   try {
     const all = listCanvasItems(projectId);
@@ -193,6 +200,7 @@ export async function groupItemsAction(
     const group = createCanvasGroup({
       projectId,
       name,
+      color,
       x: minX,
       y: minY,
       width: maxX - minX,
@@ -423,6 +431,150 @@ export async function clearCanvasAction(projectId: string): Promise<ActionResult
     clearCanvas(projectId);
     refresh(projectId);
     return { ok: true };
+  } catch (error) {
+    return toError(error);
+  }
+}
+
+/* ------------------------------ ① 抽卡记录 ------------------------------ */
+
+/** 切换抽卡记录展示：把指定历史记录提升为当前展示项 */
+export async function selectCanvasItemVariantAction(
+  itemId: string,
+  mediaId: string,
+): Promise<ActionResult<CanvasItem>> {
+  try {
+    const item = getCanvasItem(itemId);
+    if (!item) throw new Error('画布素材不存在');
+    const { selectCanvasItemVariant } = await import('@sakura/pipeline');
+    const updated = selectCanvasItemVariant(itemId, mediaId);
+    refresh(item.projectId);
+    return { ok: true, data: updated };
+  } catch (error) {
+    return toError(error);
+  }
+}
+
+/** 清空抽卡记录（只保留当前展示项） */
+export async function clearCanvasItemVariantsAction(itemId: string): Promise<ActionResult<CanvasItem>> {
+  try {
+    const item = getCanvasItem(itemId);
+    if (!item) throw new Error('画布素材不存在');
+    const { clearCanvasItemVariants } = await import('@sakura/pipeline');
+    const updated = clearCanvasItemVariants(itemId);
+    refresh(item.projectId);
+    return { ok: true, data: updated };
+  } catch (error) {
+    return toError(error);
+  }
+}
+
+/* ------------------------------ ④ 整理画布 ------------------------------ */
+
+/** 整理画布：按连线拓扑分层排布 */
+export async function organizeCanvasAction(
+  projectId: string,
+  mode: 'tree-h' | 'tree-v' | 'by-role' = 'tree-h',
+): Promise<ActionResult<{ count: number }>> {
+  try {
+    const { organizeCanvas, applyCanvasLayout } = await import('@sakura/pipeline');
+    const layout = organizeCanvas(projectId, mode);
+    applyCanvasLayout(layout);
+    refresh(projectId);
+    return { ok: true, data: { count: layout.length } };
+  } catch (error) {
+    return toError(error);
+  }
+}
+
+/* ------------------------------ ⑥ 节点工具 ------------------------------ */
+
+/** 提示词反解析：图片 → 可复用提示词 */
+export async function reverseParseNodeImageAction(itemId: string): Promise<ActionResult<{ prompt: string }>> {
+  try {
+    const item = getCanvasItem(itemId);
+    if (!item) throw new Error('画布素材不存在');
+    const { reverseParseNodeImage } = await import('@sakura/pipeline');
+    const result = await reverseParseNodeImage(itemId);
+    refresh(item.projectId);
+    return { ok: true, data: result };
+  } catch (error) {
+    return toError(error);
+  }
+}
+
+/** 智能打光 */
+export async function relightNodeAction(
+  itemId: string,
+  lighting: { direction: string; quality?: string; tone?: string },
+): Promise<ActionResult<CanvasItem>> {
+  try {
+    const item = getCanvasItem(itemId);
+    if (!item) throw new Error('画布素材不存在');
+    const { relightNode } = await import('@sakura/pipeline');
+    await relightNode(itemId, lighting as never);
+    refresh(item.projectId);
+    return { ok: true, data: getCanvasItem(itemId)! };
+  } catch (error) {
+    return toError(error);
+  }
+}
+
+/** 镜头调节（取景角度 / 景别） */
+export async function adjustNodeCameraAngleAction(
+  itemId: string,
+  angle: string,
+  shotSize: string,
+): Promise<ActionResult<CanvasItem>> {
+  try {
+    const item = getCanvasItem(itemId);
+    if (!item) throw new Error('画布素材不存在');
+    const { adjustNodeCameraAngle } = await import('@sakura/pipeline');
+    await adjustNodeCameraAngle(itemId, angle as never, shotSize);
+    refresh(item.projectId);
+    return { ok: true, data: getCanvasItem(itemId)! };
+  } catch (error) {
+    return toError(error);
+  }
+}
+
+/* ------------------------------ ③ 运镜库插入 ------------------------------ */
+
+/** 把运镜模板插入选中节点（写入节点文本尾部，或给镜头节点设置运镜） */
+export async function insertCameraMoveAction(
+  itemId: string,
+  cameraId: string,
+): Promise<ActionResult<CanvasItem>> {
+  try {
+    const item = getCanvasItem(itemId);
+    if (!item) throw new Error('画布素材不存在');
+    const { findCameraMove } = await import('@sakura/core');
+    const move = findCameraMove(cameraId);
+    if (!move) throw new Error(`运镜模板不存在：${cameraId}`);
+    const updated = updateCanvasItem(itemId, {
+      text: `${item.text}\n[运镜] ${move.name}：${move.prompt}`,
+    });
+    refresh(item.projectId);
+    return { ok: true, data: updated };
+  } catch (error) {
+    return toError(error);
+  }
+}
+
+/* ------------------------------ ⑨ 资产节点 ------------------------------ */
+
+/** 把节点升级为角色 / 场景 / 道具资产节点，并关联剧本实体 */
+export async function linkNodeToAssetAction(
+  itemId: string,
+  role: 'character' | 'scene' | 'prop',
+  refId: string,
+): Promise<ActionResult<CanvasItem>> {
+  try {
+    const item = getCanvasItem(itemId);
+    if (!item) throw new Error('画布素材不存在');
+    const updated = updateCanvasItem(itemId, { role, refId });
+    refresh(item.projectId);
+    return { ok: true, data: updated };
   } catch (error) {
     return toError(error);
   }

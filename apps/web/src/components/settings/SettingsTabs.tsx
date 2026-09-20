@@ -8,13 +8,17 @@ import {
   PROTOCOL_LABELS,
   PROVIDER_PRESETS,
   findPreset,
+  formatPricing,
   type Capability,
+  type ModelEntry,
   type ProviderProtocol,
 } from '@sakura/core';
 import { Badge, Button, Card, Empty, Field, Input, Select, Textarea } from '@/components/ui';
 import {
   deleteProviderAction,
+  fetchProviderBalanceAction,
   probeProviderAction,
+  pullProviderModelsAction,
   saveAppSettingsAction,
   saveModelRouteAction,
   saveProviderAction,
@@ -34,7 +38,7 @@ export interface ProviderRow {
   protocol: ProviderProtocol;
   baseUrl: string;
   enabled: boolean;
-  models: Array<{ id: string; label: string; capability: Capability }>;
+  models: ModelEntry[];
 }
 
 export interface ProviderFormState {
@@ -417,6 +421,7 @@ export function ProvidersTab({ data }: { data: SettingsData }) {
   const [modelsText, setModelsText] = useState('gpt-4o:text\ngpt-image-1:image\nsora-2:video');
   const [busy, setBusy] = useState(false);
   const [probe, setProbe] = useState<Record<string, string>>({});
+  const [balance, setBalance] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState<ProviderFormState>({
     id: '',
@@ -482,6 +487,7 @@ export function ProvidersTab({ data }: { data: SettingsData }) {
               key={provider.id}
               provider={provider}
               probeText={probe[provider.id] ?? ''}
+              balanceText={balance[provider.id] ?? ''}
               onProbe={async () => {
                 setProbe({ ...probe, [provider.id]: '检测中…' });
                 const result = await probeProviderAction(provider.id);
@@ -492,6 +498,42 @@ export function ProvidersTab({ data }: { data: SettingsData }) {
                       ? `✅ ${result.data.message}`
                       : `❌ ${(result.ok ? result.data?.message : result.error) ?? '失败'}`,
                 });
+              }}
+              onPullModels={async () => {
+                setProbe({ ...probe, [provider.id]: '拉取模型中…' });
+                const result = await pullProviderModelsAction(provider.id);
+                if (result.ok && result.data) {
+                  const list = result.data;
+                  if (list.length === 0) {
+                    setProbe({ ...probe, [provider.id]: '⚠️ 该供应商未返回任何模型' });
+                    return;
+                  }
+                  // 填入编辑表单，默认按名称猜测能力，用户可微调后保存
+                  const guess = (id: string): Capability => {
+                    const s = id.toLowerCase();
+                    if (/sora|video|cogvideo|kling|seedance|wan|vidu|ltx|veo/.test(s)) return 'video';
+                    if (/image|dall|seedream|flux|sd|stable|gpt-image|imagen/.test(s)) return 'image';
+                    if (/tts|speech|audio|voice|music|cosyvoice/.test(s)) return 'audio';
+                    return 'text';
+                  };
+                  setForm({ ...form, id: provider.id, name: provider.name, protocol: provider.protocol, baseUrl: provider.baseUrl });
+                  setModelsText(list.map((id) => `${id}:${guess(id)}`).join('\n'));
+                  setProbe({ ...probe, [provider.id]: `✅ 已拉取 ${list.length} 个模型，可在右侧表单中核对能力后保存` });
+                } else {
+                  setProbe({ ...probe, [provider.id]: `❌ ${result.error ?? '拉取失败'}` });
+                }
+              }}
+              onBalance={async () => {
+                setBalance({ ...balance, [provider.id]: '查询中…' });
+                const result = await fetchProviderBalanceAction(provider.id);
+                if (result.ok && result.data) {
+                  setBalance({
+                    ...balance,
+                    [provider.id]: result.data.supported ? `💰 ${result.data.detail}` : `🚫 ${result.data.detail}`,
+                  });
+                } else {
+                  setBalance({ ...balance, [provider.id]: `❌ ${result.error ?? '查询失败'}` });
+                }
               }}
               onEdit={() => {
                 setForm({
@@ -530,13 +572,19 @@ export function ProvidersTab({ data }: { data: SettingsData }) {
 function ProviderCardView({
   provider,
   probeText,
+  balanceText,
   onProbe,
+  onPullModels,
+  onBalance,
   onEdit,
   onDelete,
 }: {
   provider: ProviderRow;
   probeText: string;
+  balanceText: string;
   onProbe: () => void;
+  onPullModels: () => void;
+  onBalance: () => void;
   onEdit: () => void;
   onDelete: () => void;
 }) {
@@ -550,9 +598,15 @@ function ProviderCardView({
         </span>
       }
       extra={
-        <div className="flex gap-1">
+        <div className="flex flex-wrap gap-1">
           <Button size="sm" variant="ghost" onClick={onProbe}>
-            连通性检测
+            连通检测
+          </Button>
+          <Button size="sm" variant="ghost" onClick={onPullModels} title="从供应商接口拉取可用模型，填入右侧表单">
+            拉取模型
+          </Button>
+          <Button size="sm" variant="ghost" onClick={onBalance} title="查询剩余额度（仅部分供应商支持）">
+            余额
           </Button>
           <Button size="sm" variant="ghost" onClick={onEdit}>
             编辑
@@ -565,13 +619,28 @@ function ProviderCardView({
     >
       <div className="text-[11px] text-slate-500">{provider.baseUrl}</div>
       <div className="mt-2 flex flex-wrap gap-1">
-        {provider.models.map((model) => (
-          <Badge key={model.id} tone="default">
-            {model.id} · {CAPABILITY_LABELS[model.capability] ?? model.capability}
-          </Badge>
-        ))}
+        {provider.models.length === 0 ? (
+          <span className="text-[11px] text-slate-600">尚未配置模型，点击「拉取模型」一键获取</span>
+        ) : (
+          provider.models.map((model) => {
+            const price = formatPricing(model.pricing);
+            return (
+              <span
+                key={model.id}
+                className="inline-flex items-center gap-1 rounded-full border border-[#2b3240] bg-[#12151c] px-2 py-0.5 text-[10px] text-slate-300"
+                title={model.label}
+              >
+                <span className="text-slate-400">{model.id}</span>
+                <span className="text-slate-600">·</span>
+                <span>{CAPABILITY_LABELS[model.capability] ?? model.capability}</span>
+                {price ? <span className="font-medium text-amber-300/90">{price}</span> : null}
+              </span>
+            );
+          })
+        )}
       </div>
       {probeText ? <div className="mt-2 text-[11px] text-slate-400">{probeText}</div> : null}
+      {balanceText ? <div className="mt-1 text-[11px] text-amber-300/90">{balanceText}</div> : null}
     </Card>
   );
 }

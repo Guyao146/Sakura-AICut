@@ -12,7 +12,7 @@ export function connectedRoutesSummary() {
       protocol: provider.protocol,
       baseUrl: provider.baseUrl,
       enabled: provider.enabled,
-      models: provider.models.map((model) => ({ id: model.id, label: model.label, capability: model.capability })),
+      models: provider.models,
     })),
     routes: listModelRoutes().map((route) => ({
       capability: route.capability,

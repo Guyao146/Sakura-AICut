@@ -34,6 +34,21 @@ CREATE TABLE IF NOT EXISTS screenplays (
   FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
 );
 
+-- 剧本版本（剧本助手版本管理：落稿 / 回滚 / 对比）
+CREATE TABLE IF NOT EXISTS screenplay_versions (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL,
+  version INTEGER NOT NULL,
+  title TEXT NOT NULL DEFAULT '',
+  raw TEXT NOT NULL DEFAULT '',
+  data_json TEXT NOT NULL DEFAULT '{}',
+  source TEXT NOT NULL DEFAULT 'manual',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_script_versions_project ON screenplay_versions(project_id, version DESC);
+
 -- 媒体（图片 / 视频 / 音频）
 CREATE TABLE IF NOT EXISTS media (
   id TEXT PRIMARY KEY,
@@ -107,6 +122,7 @@ CREATE TABLE IF NOT EXISTS shots (
   last_frame_media_id TEXT,
   clip_media_ids_json TEXT NOT NULL DEFAULT '[]',
   selected_media_id TEXT,
+  dubbing_media_id TEXT,
   status TEXT NOT NULL DEFAULT 'pending',
   error TEXT,
   sort_order INTEGER NOT NULL DEFAULT 0,
@@ -297,6 +313,10 @@ CREATE TABLE IF NOT EXISTS canvas_items (
   height REAL NOT NULL DEFAULT 0,
   z INTEGER NOT NULL DEFAULT 0,
   rotation REAL NOT NULL DEFAULT 0,
+  role TEXT NOT NULL DEFAULT 'plain',
+  ref_id TEXT,
+  voice_ref_media_id TEXT,
+  variants_json TEXT NOT NULL DEFAULT '[]',
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
   FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
@@ -343,6 +363,28 @@ CREATE TABLE IF NOT EXISTS canvas_group_items (
   FOREIGN KEY (group_id) REFERENCES canvas_groups(id) ON DELETE CASCADE,
   FOREIGN KEY (item_id) REFERENCES canvas_items(id) ON DELETE CASCADE
 );
+
+-- 视频重绘（RHSTORY 式：原片一换角色 / 画风 / 画幅）
+CREATE TABLE IF NOT EXISTS video_redraws (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL,
+  source_media_id TEXT NOT NULL,
+  output_media_id TEXT,
+  character_prompt TEXT,
+  style_prompt TEXT,
+  aspect_ratio TEXT,
+  scene_prompt TEXT,
+  extra_prompt TEXT,
+  segment_duration_sec REAL NOT NULL DEFAULT 5,
+  keyframes_json TEXT NOT NULL DEFAULT '[]',
+  status TEXT NOT NULL DEFAULT 'pending',
+  error TEXT,
+  job_id TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_redraws_project ON video_redraws(project_id, created_at DESC);
 
 -- 全局设置（键值）
 CREATE TABLE IF NOT EXISTS settings (

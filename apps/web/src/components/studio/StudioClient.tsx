@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import clsx from 'clsx';
 import type { Job } from '@sakura/core';
 import { Badge, Button, Progress } from '@/components/ui';
+import { APP_VERSION } from '@sakura/core';
 import { StepBriefPanel, StepScriptPanel } from './StudioPanels';
 import { StepAssetsPanel } from './ProductionPanels';
 import { StepShotsPanel } from './ShotPanels';
@@ -14,6 +15,7 @@ import { AgentPanel } from './AgentPanel';
 import { StudioCanvasBoard } from './StudioCanvas';
 import { MediaLibraryPanel } from './MediaLibraryPanel';
 import { UploadPanel } from './UploadPanel';
+import { RedrawPanel, ReplicatePanel, ScriptVersionPanel, SmartPreviewPanel } from './FeaturePanels';
 import type { StudioData } from './types';
 
 /**
@@ -26,7 +28,9 @@ export default function StudioClient({ data }: { data: StudioData }) {
   const router = useRouter();
   const [stage, setStage] = useState<string>(STEP_ORDER.includes(data.project.stage) ? data.project.stage : 'brief');
   const [tab, setTab] = useState<'step' | 'agent' | 'canvas'>('step');
+  const [agentMode, setAgentMode] = useState<'plan' | 'action'>('plan');
   const [busy, setBusy] = useState(false);
+  const [panelCollapsed, setPanelCollapsed] = useState(false);
   const [message, setMessage] = useState<{ tone: 'ok' | 'err'; text: string } | null>(null);
   const [jobs, setJobs] = useState<Job[]>([]);
   const lastActiveCount = useRef(0);
@@ -79,6 +83,9 @@ export default function StudioClient({ data }: { data: StudioData }) {
           <Link href="/" className="text-[12px] text-slate-400 hover:text-slate-200">
             ← 项目
           </Link>
+          <Badge tone="pink">
+            v{APP_VERSION}
+          </Badge>
           <div className="min-w-0">
             <div className="truncate text-[14px] font-medium text-slate-100">{data.project.brief.name}</div>
             <div className="truncate text-[11px] text-slate-500">
@@ -170,42 +177,172 @@ export default function StudioClient({ data }: { data: StudioData }) {
           ))}
         </nav>
 
-        <div className="min-w-0 flex-1">
-          <StudioCanvasBoard data={data} />
+        <div className="flex min-w-0 flex-1 flex-col">
+          {/* 画布顶部五步流程条 */}
+          <div className="flex shrink-0 items-center gap-1.5 border-b border-[#1c2129] bg-[#0e1116] px-3 py-1.5">
+            {data.progress.map((item, idx) => (
+              <button
+                key={item.stage}
+                type="button"
+                onClick={() => {
+                  setStage(item.stage);
+                  setTab('step');
+                }}
+                className={clsx(
+                  'group flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] transition-all',
+                  stage === item.stage && tab === 'step'
+                    ? 'border-pink-400/50 bg-pink-500/10 text-pink-200'
+                    : item.percent >= 100
+                      ? 'border-emerald-500/30 bg-emerald-500/5 text-emerald-300/80 hover:bg-emerald-500/10'
+                      : 'border-transparent text-slate-400 hover:bg-white/5 hover:text-slate-200',
+                )}
+                title={`${item.title} · ${item.stats}`}
+              >
+                <span
+                  className={clsx(
+                    'flex size-4 items-center justify-center rounded-full text-[9px]',
+                    item.percent >= 100
+                      ? 'bg-emerald-500/20 text-emerald-300'
+                      : stage === item.stage
+                        ? 'bg-pink-500/30 text-pink-200'
+                        : 'bg-white/10 text-slate-400',
+                  )}
+                >
+                  {item.percent >= 100 ? '✓' : idx + 1}
+                </span>
+                <span className="hidden sm:inline">{item.title}</span>
+                <span className="text-[9px] opacity-70">{item.percent}%</span>
+              </button>
+            ))}
+            <div className="ml-auto flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setTab('canvas')}
+                className={clsx(
+                  'rounded-full border px-2.5 py-1 text-[11px] transition-all',
+                  tab === 'canvas'
+                    ? 'border-sky-400/50 bg-sky-500/10 text-sky-200'
+                    : 'border-transparent text-slate-400 hover:bg-white/5 hover:text-slate-200',
+                )}
+              >
+                🎨 素材
+              </button>
+              <button
+                type="button"
+                onClick={() => setTab('agent')}
+                className={clsx(
+                  'rounded-full border px-2.5 py-1 text-[11px] transition-all',
+                  tab === 'agent'
+                    ? 'border-amber-400/50 bg-amber-500/10 text-amber-200'
+                    : 'border-transparent text-slate-400 hover:bg-white/5 hover:text-slate-200',
+                )}
+              >
+                🤖 Agent
+              </button>
+            </div>
+          </div>
+
+          <div className="min-h-0 flex-1">
+            <StudioCanvasBoard data={data} />
+          </div>
         </div>
 
-        <aside className="w-[460px] shrink-0 overflow-y-auto border-l border-[#1c2129] bg-[#0b0d12] p-3">
-          {tab === 'canvas' ? (
-            <div className="space-y-4">
-              <div>
-                <h3 className="text-xs font-medium text-slate-300 mb-2">上传素材</h3>
-                <UploadPanel projectId={data.project.id} />
-              </div>
-              <div>
-                <h3 className="text-xs font-medium text-slate-300 mb-2">项目素材</h3>
-                <MediaLibraryPanel projectId={data.project.id} media={data.media} canvasItemCount={data.canvasItems.length} />
-              </div>
+        {panelCollapsed ? (
+          <button
+            type="button"
+            onClick={() => setPanelCollapsed(false)}
+            className="flex w-9 shrink-0 items-center justify-center border-l border-[#1c2129] bg-[#0b0d12] text-slate-500 transition-colors hover:bg-white/5 hover:text-slate-200"
+            title="展开面板"
+          >
+            <span className="text-lg">«</span>
+          </button>
+        ) : (
+          <aside className="w-[460px] shrink-0 overflow-y-auto border-l border-[#1c2129] bg-[#0b0d12] p-3">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              {tab === 'agent' ? (
+                <div className="flex rounded-lg border border-[#242a36] bg-[#0e1116] p-0.5 text-[11px]">
+                  <button
+                    type="button"
+                    onClick={() => setAgentMode('plan')}
+                    className={clsx(
+                      'rounded-md px-2.5 py-1 transition-all',
+                      agentMode === 'plan' ? 'bg-sky-500/15 text-sky-300' : 'text-slate-500 hover:text-slate-300',
+                    )}
+                  >
+                    🧭 计划
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAgentMode('action')}
+                    className={clsx(
+                      'rounded-md px-2.5 py-1 transition-all',
+                      agentMode === 'action' ? 'bg-amber-500/15 text-amber-300' : 'text-slate-500 hover:text-slate-300',
+                    )}
+                  >
+                    ⚡ 行动
+                  </button>
+                </div>
+              ) : (
+                <span />
+              )}
+              <button
+                type="button"
+                onClick={() => setPanelCollapsed(true)}
+                className="rounded-md px-2 py-0.5 text-[11px] text-slate-500 transition-colors hover:bg-white/5 hover:text-slate-200"
+                title="折叠面板"
+              >
+                收起 »
+              </button>
             </div>
-          ) : tab === 'agent' ? (
-            <AgentPanel
-              projectId={data.project.id}
-              plan={data.plan}
-              turns={data.planTurns}
-              running={activeJobs.some((job) => job.type === 'agent.run')}
-              onRefresh={() => void loadJobs()}
-            />
-          ) : stage === 'brief' ? (
-            <StepBriefPanel data={data} busy={busy} run={run} />
-          ) : stage === 'script' ? (
-            <StepScriptPanel data={data} busy={busy} run={run} />
-          ) : stage === 'assets' ? (
-            <StepAssetsPanel data={data} busy={busy} run={run} />
-          ) : stage === 'shots' ? (
-            <StepShotsPanel data={data} busy={busy} run={run} />
-          ) : (
-            <StepEditPanel data={data} busy={busy} run={run} />
-          )}
-        </aside>
+            <div key={tab + stage} className="animate-fade-in">
+              {tab === 'canvas' ? (
+                <div className="space-y-4">
+                  <div>
+                    <h3 className="text-xs font-medium text-slate-300 mb-2">上传素材</h3>
+                    <UploadPanel projectId={data.project.id} />
+                  </div>
+                  <div>
+                    <h3 className="text-xs font-medium text-slate-300 mb-2">项目素材</h3>
+                    <MediaLibraryPanel projectId={data.project.id} media={data.media} canvasItemCount={data.canvasItems.length} />
+                  </div>
+                </div>
+              ) : tab === 'agent' ? (
+                <AgentPanel
+                  projectId={data.project.id}
+                  plan={data.plan}
+                  turns={data.planTurns}
+                  mode={agentMode}
+                  running={activeJobs.some((job) => job.type === 'agent.run')}
+                  onRefresh={() => void loadJobs()}
+                />
+              ) : stage === 'brief' ? (
+                <StepBriefPanel data={data} busy={busy} run={run} />
+              ) : stage === 'script' ? (
+                <div className="space-y-4">
+                  <StepScriptPanel data={data} busy={busy} run={run} />
+                  <ScriptVersionPanel
+                    projectId={data.project.id}
+                    versions={data.screenplayVersions}
+                    currentRaw={data.screenplay?.raw ?? ''}
+                  />
+                </div>
+              ) : stage === 'assets' ? (
+                <StepAssetsPanel data={data} busy={busy} run={run} />
+              ) : stage === 'shots' ? (
+                <div className="space-y-4">
+                  <StepShotsPanel data={data} busy={busy} run={run} />
+                  <SmartPreviewPanel projectId={data.project.id} />
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <StepEditPanel data={data} busy={busy} run={run} />
+                  <ReplicatePanel projectId={data.project.id} />
+                  <RedrawPanel projectId={data.project.id} />
+                </div>
+              )}
+            </div>
+          </aside>
+        )}
       </div>
     </div>
   );

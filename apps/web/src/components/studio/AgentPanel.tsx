@@ -15,18 +15,20 @@ export function AgentPanel({
   projectId,
   plan: initialPlan,
   turns: initialTurns,
+  mode,
   running,
   onRefresh,
 }: {
   projectId: string;
   plan: AgentPlan | null;
   turns: AgentChatTurn[];
+  /** 计划模式：每步等确认；行动模式：全自动执行 */
+  mode: 'plan' | 'action';
   running: boolean;
   onRefresh: () => void;
 }) {
   const router = useRouter();
   const [goal, setGoal] = useState('');
-  const [autoApprove, setAutoApprove] = useState(false);
   const [answer, setAnswer] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -60,22 +62,32 @@ export function AgentPanel({
           </Badge>
         }
       >
+        {/* 计划模式 / 行动模式 说明条 */}
+        <div className="mb-3 rounded-lg border border-[#242a36] bg-[#0e1116] p-2">
+          <div className="flex items-center gap-2 text-[11px]">
+            <span className={clsx('font-medium', mode === 'plan' ? 'text-sky-300' : 'text-amber-300')}>
+              {mode === 'plan' ? '🧭 计划模式' : '⚡ 行动模式'}
+            </span>
+          </div>
+          <div className="mt-1 text-[11px] leading-relaxed text-slate-500">
+            {mode === 'plan'
+              ? '先出完整计划，每个步骤执行前等你确认，安全可控。'
+              : '全自动执行不再逐步确认，速度更快，会直接消耗额度。'}
+          </div>
+        </div>
+
         <Textarea
           rows={3}
           value={goal}
           placeholder="例如：帮我做成 90 秒竖屏短剧：先出剧本，再出资产与分镜，最后拼好时间线"
           onChange={(event) => setGoal(event.target.value)}
         />
-        <label className="my-2 flex items-center gap-2 text-[12px] text-slate-400">
-          <input type="checkbox" checked={autoApprove} onChange={(event) => setAutoApprove(event.target.checked)} />
-          全自动执行（不再逐步确认，会直接消耗额度）
-        </label>
-        <div className="flex gap-2">
+        <div className="mt-2 flex gap-2">
           <Button
             variant="primary"
             loading={busy || running}
             disabled={!goal.trim()}
-            onClick={() => exec(() => startAgentPlanAction(projectId, goal, autoApprove))}
+            onClick={() => exec(() => startAgentPlanAction(projectId, goal, mode === 'action'))}
           >
             启动 Agent
           </Button>

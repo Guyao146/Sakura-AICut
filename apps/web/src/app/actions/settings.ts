@@ -13,7 +13,7 @@ import {
   type ProviderInput,
 } from '@sakura/db';
 import type { ModelRoute, ProviderCredentials, ProviderProtocol } from '@sakura/core';
-import { probeProvider } from '@sakura/pipeline';
+import { fetchProviderBalance, probeProvider } from '@sakura/pipeline';
 import type { ActionResult } from './project';
 
 /**
@@ -109,6 +109,26 @@ export async function probeProviderAction(id: string) {
 export async function listProvidersAction() {
   try {
     return { ok: true as const, data: listProviders({ maskCredentials: true }) };
+  } catch (error) {
+    return toError(error);
+  }
+}
+
+/** 拉取供应商可用模型列表（连通检测的副产品，用于一键填充模型列表） */
+export async function pullProviderModelsAction(id: string): Promise<ActionResult<string[]>> {
+  try {
+    const probe = await probeProvider(id);
+    if (!probe.ok) return { ok: false, error: probe.message };
+    return { ok: true, data: probe.models ?? [] };
+  } catch (error) {
+    return toError(error);
+  }
+}
+
+/** 查询供应商余额（仅部分协议支持） */
+export async function fetchProviderBalanceAction(id: string) {
+  try {
+    return { ok: true as const, data: await fetchProviderBalance(id) };
   } catch (error) {
     return toError(error);
   }

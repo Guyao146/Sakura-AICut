@@ -1,8 +1,10 @@
-import { fetchJson } from '../../utils/http';
+import { fetchJson, HttpError } from '../../utils/http';
 import type {
   AdapterContext,
   AsyncTaskHandle,
   AsyncTaskState,
+  AudioGenerateRequest,
+  AudioGenerateResult,
   ImageGenerateRequest,
   ImageGenerateResult,
   ProbeResult,
@@ -14,6 +16,7 @@ import type {
 import {
   aspectRatioToSize,
   authHeaders,
+  contextFetch,
   contextOptions,
   extractImages,
   findFirstUrl,
@@ -109,6 +112,54 @@ export const volcengineAdapter: ProviderAdapter = {
     const error = mapArkError(payload);
     if (error) throw new Error(`火山方舟图片生成失败：${error}`);
     return { images: extractImages(payload), model: req.model, raw: payload };
+  },
+
+  async audio(ctx: AdapterContext, req: AudioGenerateRequest): Promise<AudioGenerateResult> {
+    // 火山方舟 TTS：POST /api/v3/audio/speech（OpenAI 兼容格式，返回二进制音频）
+    const url = arkUrl(ctx.baseUrl, '/audio/speech');
+    const format = req.format ?? 'mp3';
+    const body: Record<string, unknown> = {
+      model: req.model,
+      input: req.input,
+      voice: req.voice ?? 'zh_female_shaoergushi_mars',
+      response_format: format,
+      ...(req.speed !== undefined ? { speed: req.speed } : {}),
+      ...(req.language ? { language: req.language } : {}),
+      ...(req.params ?? {}),
+    };
+    const res = await contextFetch(ctx)(url, {
+      method: 'POST',
+      headers: authHeaders(ctx),
+      body: JSON.stringify(body),
+      signal: contextOptions(ctx, Math.max(ctx.timeoutSec, 180) * 1000).signal,
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      throw new HttpError(`火山方舟语音合成失败 HTTP ${res.status}`, res.status, url, text.slice(0, 500));
+    }
+    const contentType = res.headers.get('content-type') ?? '';
+    if (contentType.includes('application/json')) {
+      const json = (await res.json()) as Record<string, unknown>;
+      const error2 = mapArkError(json);
+      if (error2) throw new Error(`火山方舟语音合成失败：${error2}`);
+      const urlField = (json.url ?? json.audio ?? json.data) as string | undefined;
+      if (typeof urlField === 'string' && urlField.startsWith('http')) {
+        return { url: urlField, format, model: req.model, raw: json };
+      }
+      const b64 = (json.b64_json ?? json.audio_base64) as string | undefined;
+      if (typeof b64 === 'string' && b64.length > 0) {
+        return { b64: b64.startsWith('data:') ? b64 : `data:audio/${format};base64,${b64}`, format, model: req.model, raw: json };
+      }
+      throw new Error(`火山方舟语音合成返回了无法解析的 JSON：${JSON.stringify(json).slice(0, 300)}`);
+    }
+    const buffer = new Uint8Array(await res.arrayBuffer());
+    const b64 = Buffer.from(buffer).toString('base64');
+    return {
+      b64: `data:audio/${format};base64,${b64}`,
+      format,
+      model: req.model,
+      raw: { contentType, size: buffer.byteLength },
+    };
   },
 
   async submitVideo(ctx: AdapterContext, req: VideoGenerateRequest): Promise<AsyncTaskHandle> {

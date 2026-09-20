@@ -37,10 +37,27 @@ import {
   importShotsToCanvasAction,
   importCanvasJsonAction,
   generateCanvasItemsAction,
+  selectCanvasItemVariantAction,
+  clearCanvasItemVariantsAction,
+  organizeCanvasAction,
+  listCanvasItemsAction,
+  reverseParseNodeImageAction,
+  relightNodeAction,
+  adjustNodeCameraAngleAction,
+  insertCameraMoveAction,
+  linkNodeToAssetAction,
 } from '@/app/actions/canvas';
 import { CanvasInspector } from './CanvasInspector';
+import { GroupDialog } from './GroupDialog';
+import { MentionPopup, buildMentionables, useMentionTrigger, type Mentionable } from './MentionPopup';
+import { closeAllContextMenus, openContextMenu, type MenuItem } from './contextMenu';
 import type { CanvasItem, CanvasGroup } from '@sakura/core';
-import { CANVAS_ITEM_KIND_LABELS, CANVAS_TEMPLATES } from '@sakura/core';
+import {
+  CANVAS_ITEM_KIND_LABELS,
+  CANVAS_NODE_ROLE_LABELS,
+  CANVAS_TEMPLATES,
+  builtinCameraMoves,
+} from '@sakura/core';
 import { setShotFrameAction } from '@/app/actions/production';
 
 type CanvasItemKind = 'text' | 'image' | 'video' | 'audio';
@@ -58,91 +75,186 @@ interface CanvasItemNodeData {
   shots?: Array<{ id: string; index: number; description: string }>;
   onGroup?: () => void;
   onUngroup?: () => void;
+  /** ① 抽卡记录切换 */
+  onSelectVariant?: (itemId: string, mediaId: string) => void;
+  onClearVariants?: (itemId: string) => void;
+  /** ⑥ 节点工具 */
+  onReverseParse?: (itemId: string) => void;
+  onRelight?: (itemId: string, lighting: { direction: string; quality?: string; tone?: string }) => void;
+  onAdjustAngle?: (itemId: string, angle: string, shotSize: string) => void;
+  /** ③ 运镜库插入 */
+  onInsertCameraMove?: (itemId: string, cameraId: string) => void;
+  /** ⑨ 资产节点关联 */
+  onLinkAsset?: (itemId: string, role: 'character' | 'scene' | 'prop', refId: string) => void;
+  /** 剧本人物 / 场景 / 道具列表（资产关联子菜单用） */
+  screenplayEntities?: {
+    characters: Array<{ id: string; name: string }>;
+    locations: Array<{ id: string; name: string }>;
+    props: Array<{ id: string; name: string }>;
+  };
+  /** ② @ 引用候选列表 */
+  mentionables?: Mentionable[];
 }
 
 function CanvasItemNode({ data, selected }: { data: CanvasItemNodeData; selected?: boolean }) {
-  const { item, groupId, onUpdate, onDelete, onBringToFront, onGenerate, onSendToShot, shots, onGroup, onUngroup } = data;
+  const {
+    item,
+    groupId,
+    onUpdate,
+    onDelete,
+    onBringToFront,
+    onGenerate,
+    onSendToShot,
+    shots,
+    onGroup,
+    onUngroup,
+    onSelectVariant,
+    onClearVariants,
+    onReverseParse,
+    onRelight,
+    onAdjustAngle,
+    onInsertCameraMove,
+    onLinkAsset,
+    screenplayEntities,
+    mentionables,
+  } = data;
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState(item.text);
+  const [caret, setCaret] = useState(0);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const mention = useMentionTrigger(text, caret);
+  const [mentionAnchor, setMentionAnchor] = useState<{ x: number; y: number } | null>(null);
 
   const handleSaveText = async () => {
     if (text !== item.text) await onUpdate({ text });
     setEditing(false);
+    setMentionAnchor(null);
   };
 
   const handleRightClick = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    const menu = document.createElement('div');
-    menu.className = 'fixed bg-[#1a1f2e] border border-[#333b4a] rounded-lg z-50 py-1 text-xs';
-    menu.style.left = `${e.clientX}px`;
-    menu.style.top = `${e.clientY}px`;
-
-    const options = [
-      { label: '编辑', action: () => item.kind === 'text' && setEditing(true), hide: item.kind !== 'text' },
-      { label: '✨ 生成图片', action: () => onGenerate?.([item.id]), hide: !item.text.trim() || !onGenerate },
-      { label: '➤ 发到镜头首帧…', action: () => showShotSubmenu('first'), hide: item.kind !== 'image' || !item.mediaId || !onSendToShot },
-      { label: '➤ 发到镜头尾帧…', action: () => showShotSubmenu('last'), hide: item.kind !== 'image' || !item.mediaId || !onSendToShot },
-      { label: '置顶', action: onBringToFront },
-      { label: groupId ? '解组' : '成组（需多选）', action: groupId ? () => onUngroup?.() : () => onGroup?.(), hide: !groupId && !onGroup },
-      { label: '删除', action: onDelete, danger: true },
-    ];
 
     /** 二级菜单：选择要设为首/尾帧的镜头 */
-    function showShotSubmenu(which: 'first' | 'last') {
+    const showShotSubmenu = (which: 'first' | 'last') => {
       const list = shots ?? [];
       if (list.length === 0) {
         alert('当前项目还没有镜头，请先在第四步拆解分镜');
         return;
       }
-      const sub = document.createElement('div');
-      sub.className = 'fixed bg-[#1a1f2e] border border-[#333b4a] rounded-lg z-[60] py-1 text-xs max-h-64 overflow-y-auto';
-      sub.style.left = `${e.clientX + 8}px`;
-      sub.style.top = `${e.clientY}px`;
-      list.forEach((shot) => {
-        const btn = document.createElement('button');
-        btn.textContent = `#${shot.index} ${shot.description.slice(0, 18)}`;
-        btn.className = 'w-full text-left px-3 py-1.5 hover:bg-white/5';
-        btn.onclick = async (ev: any) => {
-          ev.stopPropagation();
-          onSendToShot?.(item.mediaId as string, shot.id, which);
-          sub.remove();
-        };
-        sub.appendChild(btn);
-      });
-      document.body.appendChild(sub);
-      setTimeout(() => {
-        document.addEventListener('click', () => sub.remove(), { once: true });
-      }, 0);
-    }
-
-    options.forEach(({ label, action, danger, hide }: any) => {
-      if (hide) return;
-      const btn = document.createElement('button');
-      btn.textContent = label;
-      btn.className = clsx(
-        'w-full text-left px-3 py-1.5 hover:bg-white/5',
-        danger && 'text-red-300 hover:bg-red-500/10',
+      openContextMenu(
+        list.map((shot) => ({
+          label: `#${shot.index} ${shot.description.slice(0, 18)}`,
+          action: () => onSendToShot?.(item.mediaId as string, shot.id, which),
+        })),
+        e.clientX + 8,
+        e.clientY,
       );
-      btn.onclick = async (ev: any) => {
-        ev.stopPropagation();
-        await action();
-        menu.remove();
-      };
-      menu.appendChild(btn);
-    });
+    };
 
-    document.body.appendChild(menu);
-    setTimeout(() => {
-      document.addEventListener('click', () => menu.remove(), { once: true });
-    }, 0);
+    /** ① 二级菜单：抽卡记录 */
+    const showVariantsSubmenu = () => {
+      const variants = item.variants ?? [];
+      openContextMenu(
+        [
+          ...variants.map((variant, index) => ({
+            label: `#${variants.length - index} ${variant.prompt?.slice(0, 16) ?? '历史记录'}`,
+            action: () => onSelectVariant?.(item.id, variant.mediaId),
+          })),
+          { label: '清空抽卡记录', action: () => onClearVariants?.(item.id), danger: true },
+        ],
+        e.clientX + 8,
+        e.clientY,
+      );
+    };
+
+    /** ⑥ 二级菜单：智能打光 */
+    const showRelightSubmenu = () => {
+      const dirs = ['正面光', '侧光', '逆光', '顶光', '底光', '伦勃朗光'];
+      openContextMenu(
+        dirs.map((dir) => ({
+          label: `💡 ${dir}`,
+          action: () => onRelight?.(item.id, { direction: dir }),
+        })),
+        e.clientX + 8,
+        e.clientY,
+      );
+    };
+
+    /** ⑥ 二级菜单：镜头调节 */
+    const showAngleSubmenu = () => {
+      const angles = ['平视', '俯拍', '仰拍', '过肩', '倾斜'];
+      openContextMenu(
+        angles.map((angle) => ({
+          label: `🎥 ${angle}`,
+          action: () => onAdjustAngle?.(item.id, angle, item.kind === 'image' ? '中景' : '近景'),
+        })),
+        e.clientX + 8,
+        e.clientY,
+      );
+    };
+
+    /** ③ 二级菜单：运镜库插入 */
+    const showCameraMovesSubmenu = () => {
+      openContextMenu(
+        builtinCameraMoves().map((move) => ({
+          label: `🎥 ${move.name}`,
+          action: () => onInsertCameraMove?.(item.id, move.id),
+        })),
+        e.clientX + 8,
+        e.clientY,
+      );
+    };
+
+    /** ⑨ 二级菜单：关联剧本资产 */
+    const showLinkAssetSubmenu = () => {
+      const entities = screenplayEntities ?? { characters: [], locations: [], props: [] };
+      openContextMenu(
+        [
+          ...entities.characters.map((c) => ({
+            label: `👤 ${c.name}`,
+            action: () => onLinkAsset?.(item.id, 'character', c.id),
+          })),
+          ...entities.locations.map((l) => ({
+            label: `🏞️ ${l.name}`,
+            action: () => onLinkAsset?.(item.id, 'scene', l.id),
+          })),
+          ...entities.props.map((p) => ({
+            label: `道具 ${p.name}`,
+            action: () => onLinkAsset?.(item.id, 'prop', p.id),
+          })),
+        ],
+        e.clientX + 8,
+        e.clientY,
+      );
+    };
+
+    const variants = item.variants ?? [];
+    const options: MenuItem[] = [
+      { label: '编辑', icon: '✏️', action: () => { if (item.kind === 'text') setEditing(true); }, hide: item.kind !== 'text' },
+      { label: '生成图片', icon: '✨', action: () => onGenerate?.([item.id]), hide: !item.text.trim() || !onGenerate },
+      { label: `抽卡记录 (${variants.length})`, icon: '🃏', action: () => showVariantsSubmenu(), hide: variants.length === 0 || !onSelectVariant },
+      { label: '反解析提示词', icon: '🔍', action: () => onReverseParse?.(item.id), hide: item.kind !== 'image' || !onReverseParse },
+      { label: '智能打光…', icon: '💡', action: () => showRelightSubmenu(), hide: !onRelight },
+      { label: '镜头角度…', icon: '🎥', action: () => showAngleSubmenu(), hide: !onAdjustAngle },
+      { label: '插入运镜…', icon: '🎬', action: () => showCameraMovesSubmenu(), hide: !onInsertCameraMove },
+      { label: '关联资产…', icon: '🔗', action: () => showLinkAssetSubmenu(), hide: !onLinkAsset || !screenplayEntities },
+      { label: '发到镜头首帧…', icon: '➤', action: () => showShotSubmenu('first'), hide: item.kind !== 'image' || !item.mediaId || !onSendToShot },
+      { label: '发到镜头尾帧…', icon: '➤', action: () => showShotSubmenu('last'), hide: item.kind !== 'image' || !item.mediaId || !onSendToShot },
+      { label: '置顶', icon: '⬆️', action: () => void onBringToFront() },
+      { label: groupId ? '解组' : '成组（需多选）', icon: '🎬', action: () => void (groupId ? onUngroup?.() : onGroup?.()), hide: !groupId && !onGroup },
+      { label: '删除', icon: '🗑️', action: () => void onDelete(), danger: true },
+    ];
+    openContextMenu(options, e.clientX, e.clientY);
   };
 
   return (
     <div
       className={clsx(
-        'relative rounded-lg border bg-[#12151c] p-2 shadow-md h-full w-full',
-        selected ? 'ring-2 ring-pink-400/70' : 'border-[#333b4a]',
+        'node-lift relative rounded-xl border bg-[#12151c] p-2 shadow-lg shadow-black/40 h-full w-full',
+        selected
+          ? 'border-pink-400/60 ring-1 ring-pink-400/40'
+          : 'border-[#2b3240] hover:border-pink-400/30',
       )}
       onContextMenu={handleRightClick}
       onDoubleClick={(e) => {
@@ -156,16 +268,67 @@ function CanvasItemNode({ data, selected }: { data: CanvasItemNodeData; selected
       <NodeResizer minWidth={80} minHeight={60} isVisible={selected} />
       <div className="mb-1 flex items-center gap-1.5 pointer-events-none">
         <Badge tone={item.kind === 'text' ? 'default' : 'pink'}>{CANVAS_ITEM_KIND_LABELS[item.kind]}</Badge>
+        {item.role && item.role !== 'plain' ? (
+          <span className="text-[10px] text-cyan-300/90" title={CANVAS_NODE_ROLE_LABELS[item.role]}>
+            {item.role === 'character' ? '👤' : item.role === 'scene' ? '🏞️' : '📦'} {CANVAS_NODE_ROLE_LABELS[item.role]}
+          </span>
+        ) : null}
+        {(item.variants?.length ?? 0) > 0 ? (
+          <span className="text-[10px] text-amber-300/90" title={`抽卡记录 ${item.variants!.length} 张`}>
+            🃏 {item.variants!.length}
+          </span>
+        ) : null}
         {groupId ? <span className="text-[10px] text-pink-300/80">◈ 已分组</span> : null}
       </div>
       {editing ? (
-        <textarea autoFocus value={text} onChange={(e) => setText(e.target.value)} onBlur={handleSaveText} className="w-full h-[calc(100%-24px)] text-xs bg-[#0e1116] border border-pink-400/40 rounded px-1 py-0.5 resize-none" />
+        <>
+          <textarea
+            ref={textareaRef}
+            autoFocus
+            value={text}
+            onChange={(e) => {
+              setText(e.target.value);
+              setCaret(e.target.selectionStart ?? 0);
+            }}
+            onKeyUp={(e) => setCaret(e.currentTarget.selectionStart ?? 0)}
+            onClick={(e) => {
+              e.stopPropagation();
+              setCaret(e.currentTarget.selectionStart ?? 0);
+              const rect = e.currentTarget.getBoundingClientRect();
+              setMentionAnchor({ x: rect.left, y: rect.bottom + 4 });
+            }}
+            onBlur={handleSaveText}
+            className="w-full h-[calc(100%-24px)] text-xs bg-[#0e1116] border border-pink-400/40 rounded px-1 py-0.5 resize-none"
+          />
+          {mention.query !== null && mentionAnchor ? (
+            <MentionPopup
+              query={mention.query}
+              items={mentionables ?? []}
+              anchor={mentionAnchor}
+              onSelect={(selected) => {
+                // 把 @query 替换成 @完整名称
+                const before = text.slice(0, caret).replace(/@[^\s@]{0,20}$/, '');
+                const after = text.slice(caret);
+                const next = `${before}@${selected.name} ${after}`;
+                setText(next);
+                setCaret(next.length);
+              }}
+              onClose={() => setMentionAnchor(null)}
+            />
+          ) : null}
+        </>
       ) : item.kind === 'text' ? (
         <div className="text-xs text-slate-300 whitespace-pre-wrap break-words overflow-hidden">{item.text || '（空）'}</div>
       ) : item.kind === 'image' && item.url ? (
-        <img src={item.url} alt={item.text} className="w-full h-auto rounded object-cover" />
+        <div className="relative w-full overflow-hidden rounded bg-[#0e1116]">
+          <div className="skeleton-shimmer absolute inset-0 h-full w-full rounded" />
+          <img src={item.url} alt={item.text} loading="lazy" className="relative w-full h-auto rounded object-cover" />
+        </div>
       ) : item.kind === 'video' && item.url ? (
-        <video src={item.url} className="w-full h-auto rounded object-cover" />
+        <div className="relative w-full overflow-hidden rounded bg-[#0e1116]">
+          <div className="skeleton-shimmer absolute inset-0 h-full w-full rounded" />
+          <video src={item.url} className="relative w-full h-auto rounded object-cover" />
+        </div>
       ) : item.kind === 'audio' && item.url ? (
         <audio src={item.url} controls className="w-full text-xs" />
       ) : (
@@ -204,6 +367,53 @@ function CanvasInner({ data, projectId }: { data: StudioData; projectId: string 
   const [groups, setGroups] = useState<CanvasGroup[]>(data.canvasGroups);
   const [itemGroups, setItemGroups] = useState<Record<string, string>>(data.itemGroups);
   const { screenToFlowPosition, fitView, setCenter } = useReactFlow();
+
+  /* ------------------------- 可拖动工具栏（dock） ------------------------- */
+  const paneRef = useRef<HTMLDivElement>(null);
+  const [dockPos, setDockPos] = useState(() => {
+    if (typeof window === 'undefined') return { x: 12, y: 12 };
+    try {
+      const saved = window.localStorage.getItem('sakura.dockPos');
+      if (saved) {
+        const pos = JSON.parse(saved) as { x: number; y: number };
+        if (typeof pos.x === 'number' && typeof pos.y === 'number') return pos;
+      }
+    } catch {
+      /* localStorage 不可用时用默认值 */
+    }
+    return { x: 12, y: 12 };
+  });
+
+  const handleDockDragStart = (event: React.PointerEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const start = { x: event.clientX, y: event.clientY };
+    const origin = { ...dockPos };
+    const pane = paneRef.current;
+    // 用可变变量记录最新位置，松手时持久化（闭包里的 dockPos 是拖拽前的旧值）
+    let latest = origin;
+    const onMove = (ev: PointerEvent) => {
+      // 拖拽手柄最多移动到容器边缘，留出工具栏高度的一半
+      const maxX = Math.max(0, (pane?.clientWidth ?? 800) - 240);
+      const maxY = Math.max(0, (pane?.clientHeight ?? 600) - 48);
+      latest = {
+        x: Math.min(maxX, Math.max(0, origin.x + ev.clientX - start.x)),
+        y: Math.min(maxY, Math.max(0, origin.y + ev.clientY - start.y)),
+      };
+      setDockPos(latest);
+    };
+    const onUp = () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      try {
+        window.localStorage.setItem('sakura.dockPos', JSON.stringify(latest));
+      } catch {
+        /* 忽略持久化失败 */
+      }
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+  };
 
   // 服务端数据变化时（如 worker 生成完成后 router.refresh()）合并内容字段：
   // kind/url/mediaId/text 跟随服务端，坐标/尺寸保留本地值，避免和拖动状态打架。
@@ -300,6 +510,68 @@ function CanvasInner({ data, projectId }: { data: StudioData; projectId: string 
               return next;
             });
           },
+          onSelectVariant: async (itemId: string, mediaId: string) => {
+            const result = await selectCanvasItemVariantAction(itemId, mediaId);
+            if (result.ok && result.data) {
+              setItems((prev) => prev.map((it) => (it.id === itemId ? result.data! : it)));
+            } else {
+              alert(result.error ?? '切换抽卡记录失败');
+            }
+          },
+          onClearVariants: async (itemId: string) => {
+            const result = await clearCanvasItemVariantsAction(itemId);
+            if (result.ok && result.data) {
+              setItems((prev) => prev.map((it) => (it.id === itemId ? result.data! : it)));
+            }
+          },
+          onReverseParse: async (itemId: string) => {
+            const result = await reverseParseNodeImageAction(itemId);
+            if (result.ok && result.data) {
+              setItems((prev) => prev.map((it) => (it.id === itemId ? { ...it, text: result.data!.prompt } : it)));
+            } else {
+              alert(result.error ?? '反解析失败');
+            }
+          },
+          onRelight: async (itemId: string, lighting: { direction: string; quality?: string; tone?: string }) => {
+            const result = await relightNodeAction(itemId, lighting);
+            if (result.ok && result.data) {
+              setItems((prev) => prev.map((it) => (it.id === itemId ? result.data! : it)));
+            } else {
+              alert(result.error ?? '打光失败');
+            }
+          },
+          onAdjustAngle: async (itemId: string, angle: string, shotSize: string) => {
+            const result = await adjustNodeCameraAngleAction(itemId, angle, shotSize);
+            if (result.ok && result.data) {
+              setItems((prev) => prev.map((it) => (it.id === itemId ? result.data! : it)));
+            } else {
+              alert(result.error ?? '镜头调节失败');
+            }
+          },
+          onInsertCameraMove: async (itemId: string, cameraId: string) => {
+            const result = await insertCameraMoveAction(itemId, cameraId);
+            if (result.ok && result.data) {
+              setItems((prev) => prev.map((it) => (it.id === itemId ? result.data! : it)));
+            }
+          },
+          onLinkAsset: async (itemId: string, role: 'character' | 'scene' | 'prop', refId: string) => {
+            const result = await linkNodeToAssetAction(itemId, role, refId);
+            if (result.ok && result.data) {
+              setItems((prev) => prev.map((it) => (it.id === itemId ? result.data! : it)));
+            }
+          },
+          screenplayEntities: data.screenplay
+            ? {
+                characters: data.screenplay.characters.map((c) => ({ id: c.id, name: c.name })),
+                locations: data.screenplay.locations.map((l) => ({ id: l.id, name: l.name })),
+                props: data.screenplay.props.map((p) => ({ id: p.id, name: p.name })),
+              }
+            : undefined,
+          mentionables: buildMentionables({
+            assets: data.assets,
+            media: data.media,
+            screenplay: data.screenplay,
+          }),
         } as Record<string, unknown>,
         position: { x: item.x, y: item.y },
         style: { width: Math.max(80, item.width || 200), height: Math.max(60, item.height || 120), zIndex: item.z },
@@ -394,7 +666,7 @@ function CanvasInner({ data, projectId }: { data: StudioData; projectId: string 
     if (result.ok && result.data) {
       setItems(result.data);
       // 只更新已有节点的位置，保留 data 等其他字段
-      const posMap = new Map(result.data.map((item) => [item.id, { x: item.x, y: item.y }]));
+      const posMap = new Map(result.data.map((item) => [item.id, { x: item.x, y: item.y }] as const));
       setRfNodes((prev) =>
         prev.map((node) => {
           const pos = posMap.get(node.id);
@@ -403,6 +675,51 @@ function CanvasInner({ data, projectId }: { data: StudioData; projectId: string 
       );
     }
   }, [projectId, setRfNodes]);
+
+  /** ④ 整理画布（拓扑分层）：横向树 / 纵向树 / 按角色场景分组，可隐藏连线专注看结构 */
+  const [hideEdges, setHideEdges] = useState(false);
+  const handleOrganize = useCallback(
+    async (mode: 'tree-h' | 'tree-v' | 'by-role') => {
+      const result = await organizeCanvasAction(projectId, mode);
+      if (result.ok) {
+        // 服务端已写回新坐标，拉一次最新数据刷新本地
+        const refreshed = await listCanvasItemsAction(projectId);
+        if (refreshed.ok && refreshed.data) {
+          setItems(refreshed.data);
+          const posMap = new Map(refreshed.data.map((item) => [item.id, { x: item.x, y: item.y }] as const));
+          setRfNodes((prev) =>
+            prev.map((node) => {
+              const pos = posMap.get(node.id);
+              return pos ? { ...node, position: pos } : node;
+            }),
+          );
+        }
+      } else {
+        alert(result.error ?? '整理失败');
+      }
+    },
+    [projectId, setRfNodes],
+  );
+
+  const showOrganizeMenu = useCallback(
+    (e: React.MouseEvent<HTMLButtonElement>) => {
+      openContextMenu(
+        [
+          { label: '横向展开（按连线分层）', icon: '↔', action: () => void handleOrganize('tree-h') },
+          { label: '纵向展开（按连线分层）', icon: '↕', action: () => void handleOrganize('tree-v') },
+          { label: '按角色 / 场景分组', icon: '👥', action: () => void handleOrganize('by-role') },
+          {
+            label: hideEdges ? '显示连线' : '隐藏连线（专注结构）',
+            icon: hideEdges ? '👁️' : '🚫',
+            action: () => setHideEdges((v) => !v),
+          },
+        ],
+        e.clientX,
+        e.clientY,
+      );
+    },
+    [handleOrganize, hideEdges],
+  );
 
   // 应用画布模板
   const handleApplyTemplate = useCallback(
@@ -524,6 +841,10 @@ function CanvasInner({ data, projectId }: { data: StudioData; projectId: string 
 
   const [locked, setLocked] = useState(false);
   const [search, setSearch] = useState('');
+
+  /* ------------------------------ ⑤ 成组弹窗 ------------------------------ */
+  const [groupDialog, setGroupDialog] = useState<{ open: boolean; name: string }>({ open: false, name: '' });
+  const [groupDialogIds, setGroupDialogIds] = useState<string[]>([]);
 
   const matchSet = useMemo(() => {
     if (!search.trim()) return null;
@@ -648,20 +969,31 @@ function CanvasInner({ data, projectId }: { data: StudioData; projectId: string 
       alert('请先框选（Ctrl+拖拽）至少 2 个素材再成组');
       return;
     }
-    const name = window.prompt('场景名称', `场景 ${groups.length + 1}`);
-    if (name === null) return;
-    const result = await groupItemsAction(projectId, selectedIds, name || '未命名场景');
-    if (result.ok && result.data) {
-      setGroups((prev) => [...prev, result.data!]);
-      const gid = result.data.id;
-      setItemGroups((prev) => {
-        const next = { ...prev };
-        for (const id of selectedIds) next[id] = gid;
-        return next;
-      });
-      setSelectedIds([]);
-    }
-  }, [projectId, selectedIds, groups.length]);
+    // 打开弹窗前快照选中项，避免弹窗交互过程中选中集变化
+    setGroupDialogIds([...selectedIds]);
+    setGroupDialog({ open: true, name: `场景 ${groups.length + 1}` });
+  }, [selectedIds.length, groups.length]);
+
+  const handleGroupConfirm = useCallback(
+    async (name: string, color: string) => {
+      const ids = [...groupDialogIds];
+      setGroupDialog({ open: false, name: '' });
+      const result = await groupItemsAction(projectId, ids, name, color);
+      if (result.ok && result.data) {
+        setGroups((prev) => [...prev, result.data!]);
+        const gid = result.data.id;
+        setItemGroups((prev) => {
+          const next = { ...prev };
+          for (const id of ids) next[id] = gid;
+          return next;
+        });
+        setSelectedIds([]);
+      } else {
+        alert(result.error ?? '成组失败');
+      }
+    },
+    [projectId, groupDialogIds],
+  );
 
   // 乐观更新：立即显示，后台同步
   const createItem = useCallback(
@@ -719,27 +1051,17 @@ function CanvasInner({ data, projectId }: { data: StudioData; projectId: string 
     e.preventDefault();
     const pos = screenToFlowPosition({ x: e.clientX, y: e.clientY });
     const x = pos.x, y = pos.y;
-    const menu = document.createElement('div');
-    menu.className = 'fixed bg-[#1a1f2e] border border-[#333b4a] rounded-lg z-50 py-1 text-xs';
-    menu.style.left = `${e.clientX}px`;
-    menu.style.top = `${e.clientY}px`;
     const options: Array<{ label: string; icon: string; kind: CanvasItemKind }> = [
       { label: '文字', icon: '📝', kind: 'text' },
       { label: '图片', icon: '🖼️', kind: 'image' },
       { label: '视频', icon: '🎬', kind: 'video' },
       { label: '语音', icon: '🎵', kind: 'audio' },
     ];
-    options.forEach(({ label, icon, kind }) => {
-      const btn = document.createElement('button');
-      btn.textContent = `${icon} ${label}`;
-      btn.className = 'w-full text-left px-3 py-1.5 hover:bg-white/5';
-      btn.onclick = (ev: any) => { ev.stopPropagation(); createItem(kind, x, y); menu.remove(); };
-      menu.appendChild(btn);
-    });
-    document.body.appendChild(menu);
-    setTimeout(() => {
-      document.addEventListener('click', () => menu.remove(), { once: true });
-    }, 0);
+    openContextMenu(
+      options.map(({ label, icon, kind }) => ({ label, icon, action: () => createItem(kind, x, y) })),
+      e.clientX,
+      e.clientY,
+    );
   }, [createItem, screenToFlowPosition]);
 
   const handleNodesChange = useCallback((changes: NodeChange[]) => {
@@ -763,6 +1085,7 @@ function CanvasInner({ data, projectId }: { data: StudioData; projectId: string 
 
   return (
     <div
+      ref={paneRef}
       className="relative size-full bg-[#0e1116]"
       onDoubleClick={handlePaneDoubleClick}
       onContextMenu={handlePaneRightClick}
@@ -771,7 +1094,7 @@ function CanvasInner({ data, projectId }: { data: StudioData; projectId: string 
     >
       <ReactFlow
         nodes={visibleNodes}
-        edges={rfEdges}
+        edges={hideEdges ? [] : rfEdges}
         fitView={false}
         nodesDraggable={!locked}
         nodesConnectable={!locked}
@@ -817,8 +1140,18 @@ function CanvasInner({ data, projectId }: { data: StudioData; projectId: string 
         />
       </ReactFlow>
 
-      {/* 画布工具栏 */}
-      <div className="absolute left-3 top-3 z-20 flex flex-col gap-1.5 rounded-xl border border-[#333b4a] bg-[#12151c]/90 p-1.5 backdrop-blur">
+      {/* 画布工具栏（可拖动 dock） */}
+      <div
+        className="glass-panel absolute z-20 flex flex-col gap-1.5 rounded-xl border border-[#333b4a] p-1.5 shadow-xl shadow-black/50"
+        style={{ left: dockPos.x, top: dockPos.y }}
+      >
+        <div
+          className="flex cursor-grab items-center justify-center pb-0.5 active:cursor-grabbing"
+          title="按住拖动工具栏"
+          onPointerDown={handleDockDragStart}
+        >
+          <span className="block h-1 w-10 rounded-full bg-[#3b4356]" />
+        </div>
         <div className="flex flex-wrap gap-1.5">
           <button
             type="button"
@@ -845,11 +1178,15 @@ function CanvasInner({ data, projectId }: { data: StudioData; projectId: string 
           </button>
           <button
             type="button"
-            onClick={() => void handleAutoLayout()}
+            onClick={(e) => {
+              e.preventDefault();
+              showOrganizeMenu(e);
+            }}
             disabled={locked}
             className="rounded-lg px-2.5 py-1 text-[11px] text-slate-300 transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
+            title="整理画布：横向 / 纵向展开，按角色场景分组，或隐藏连线"
           >
-            ✨ 一键整理
+            🧹 整理画布 ▾
           </button>
           <button
             type="button"
@@ -940,6 +1277,13 @@ function CanvasInner({ data, projectId }: { data: StudioData; projectId: string 
         onDelete={handleInspectorDelete}
         onBringToFront={handleInspectorFront}
         onFocus={handleFocusItem}
+      />
+
+      <GroupDialog
+        open={groupDialog.open}
+        defaultName={groupDialog.name}
+        onConfirm={(name, color) => void handleGroupConfirm(name, color)}
+        onCancel={() => setGroupDialog({ open: false, name: '' })}
       />
 
       <input

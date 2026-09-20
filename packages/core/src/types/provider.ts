@@ -108,6 +108,13 @@ export interface ProviderCredentials {
   [key: string]: string | undefined;
 }
 
+/** 计费展示：把 ModelEntry.pricing 格式化成「¥0.3/张」这样的短文本 */
+export function formatPricing(pricing?: { price: number; unit: string; currency?: string }): string | null {
+  if (!pricing || typeof pricing.price !== 'number') return null;
+  const currency = pricing.currency === 'USD' ? '$' : '¥';
+  return `${currency}${pricing.price}/${pricing.unit}`;
+}
+
 /** 路由：每种能力选一个供应商 + 模型 */
 export interface ModelRoute {
   capability: Capability;

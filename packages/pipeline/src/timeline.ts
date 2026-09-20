@@ -26,6 +26,7 @@ export function buildTimelineFromShots(projectId: string, options: BuildTimeline
   const shots = listShots(projectId).filter((shot) => (options.shotIds ? options.shotIds.includes(shot.id) : true));
 
   const videoClips: TimelineClip[] = [];
+  const audioClips: TimelineClip[] = [];
   const subtitleClips: TimelineClip[] = [];
   const transitionDuration = options.transition && options.transition !== 'none' ? (options.transitionDuration ?? 0.4) : 0;
   let cursor = 0;
@@ -53,6 +54,24 @@ export function buildTimelineFromShots(projectId: string, options: BuildTimeline
         : {}),
     });
 
+    // 台词配音：与该镜头的视频片段首尾对齐
+    if (shot.dubbingMediaId) {
+      const dubbing = getMedia(shot.dubbingMediaId);
+      if (dubbing) {
+        audioClips.push({
+          id: `aud_${createId(10)}`,
+          shotId: shot.id,
+          mediaId: dubbing.id,
+          start: Number(cursor.toFixed(3)),
+          duration: Number((dubbing.durationSec && dubbing.durationSec > 0 ? dubbing.durationSec : duration).toFixed(3)),
+          trimIn: 0,
+          speed: 1,
+          volume: 1,
+          label: `#${shot.index} 配音`,
+        });
+      }
+    }
+
     if (options.includeSubtitles !== false && (shot.dialogue || shot.description)) {
       subtitleClips.push({
         id: `sub_${createId(10)}`,
@@ -76,6 +95,9 @@ export function buildTimelineFromShots(projectId: string, options: BuildTimeline
   const tracks: Track[] = [
     { id: 'track_video', type: 'video', name: '主视频轨', clips: videoClips },
   ];
+  if (audioClips.length > 0) {
+    tracks.push({ id: 'track_audio', type: 'audio', name: '配音轨', clips: audioClips });
+  }
   if (subtitleClips.length > 0) {
     tracks.push({ id: 'track_subtitle', type: 'subtitle', name: '字幕轨', clips: subtitleClips });
   }
@@ -193,6 +215,37 @@ function buildFfmpegPlan(timeline: Timeline, options: { includeSubtitles: boolea
   const concatInputs = usableClips.map((_, position) => `[v${position}]`).join('');
   filterParts.push(`${concatInputs}concat=n=${usableClips.length}:v=1:a=0[vout]`);
 
+  // 配音音频轨：逐片段延迟对齐后混音
+  const audioTrack = timeline.tracks.find((track) => track.type === 'audio');
+  const audioClips = (audioTrack?.clips ?? []).filter((clip) => !clip.muted && getMedia(clip.mediaId));
+  const audioInputBase = usableClips.length; // 视频输入占满 0..n-1，音频输入接在后面
+  const audioLabels: string[] = [];
+  audioClips.forEach((clip, index) => {
+    const media = getMedia(clip.mediaId);
+    const absolute = resolveMediaPath(media?.path);
+    if (!absolute) return;
+    const inputIndex = audioInputBase + index;
+    inputs.push('-i', absolute);
+    audioLabels.push(`a${inputIndex}`);
+
+    const volume = Math.max(0, Math.min(2, (clip.volume ?? 1) * (audioTrack?.volume ?? 1)));
+    const startMs = Math.max(0, Math.round(clip.start * 1000));
+    const parts = [
+      `atrim=start=${clip.trimIn}:duration=${clip.duration}`,
+      'asetpts=PTS-STARTPTS',
+      ...(volume !== 1 ? [`volume=${volume.toFixed(3)}`] : []),
+      ...(startMs > 0 ? [`adelay=${startMs}:all=1`] : []),
+    ];
+    filterParts.push(`[${inputIndex}:a]${parts.join(',')}[a${inputIndex}]`);
+  });
+  let audioLabel: string | null = null;
+  if (audioLabels.length === 1) {
+    audioLabel = `[${audioLabels[0]}]`;
+  } else if (audioLabels.length > 1) {
+    audioLabel = '[aout]';
+    filterParts.push(`${audioLabels.map((label) => `[${label}]`).join('')}amix=inputs=${audioLabels.length}:duration=longest:dropout_transition=0${audioLabel}`);
+  }
+
   let hasSubtitles = false;
   if (options.includeSubtitles) {
     const subtitleTrack = timeline.tracks.find((track) => track.type === 'subtitle');
@@ -209,6 +262,7 @@ function buildFfmpegPlan(timeline: Timeline, options: { includeSubtitles: boolea
     inputs,
     filterGraph: filterParts.join(';'),
     outputLabel: hasSubtitles ? '[vsub]' : '[vout]',
+    audioLabel,
     duration: Number(duration.toFixed(3)),
   };
 }
@@ -267,6 +321,7 @@ export async function renderTimeline(projectId: string, options: RenderOptions =
     plan.filterGraph,
     '-map',
     plan.outputLabel,
+    ...(plan.audioLabel ? ['-map', plan.audioLabel, '-c:a', 'aac', '-b:a', preset.audioBitrate] : []),
     '-c:v',
     preset.codec,
     '-b:v',

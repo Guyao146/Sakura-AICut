@@ -9,6 +9,7 @@ import type {
   Project,
   PromptTemplate,
   Screenplay,
+  ScreenplayVersion,
   Shot,
   Timeline,
   CameraMoveTemplate,
@@ -21,6 +22,8 @@ import type {
 export interface StudioData {
   project: Project;
   screenplay: Screenplay | null;
+  /** ⑧ 剧本版本（最新在前） */
+  screenplayVersions: ScreenplayVersion[];
   assets: Asset[];
   shots: Shot[];
   timeline: Timeline | null;

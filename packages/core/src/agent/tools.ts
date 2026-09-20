@@ -118,6 +118,57 @@ export const AGENT_TOOLS: AgentToolMeta[] = [
     argsSchema: { query: 'string 必填，检索关键词', category: 'string 可选，模板分类' },
   },
   {
+    name: 'canvas.create_item',
+    label: '在画布上创建节点',
+    description: '在无限画布上新建文字 / 图片 / 视频节点，可指定坐标，用于把创意落到画布。',
+    requiresApproval: false,
+    argsSchema: {
+      kind: 'string 必填，text / image / video',
+      text: 'string 必填，节点文本（图片视频节点可作为提示词）',
+      x: 'number 可选，横坐标，默认随机',
+      y: 'number 可选，纵坐标，默认随机',
+      role: 'string 可选，plain / character / scene / prop，资产节点会关联剧本人物场景',
+      refId: 'string 可选，关联的剧本人物 / 场景 / 道具 ID',
+    },
+  },
+  {
+    name: 'canvas.generate_image',
+    label: '画布节点生成图片',
+    description: '以画布上指定节点的文本为提示词生成图片并回填（较贵，需要确认）。',
+    requiresApproval: true,
+    argsSchema: {
+      itemIds: 'string[] 必填，要生成的画布节点 ID 列表',
+    },
+  },
+  {
+    name: 'canvas.organize',
+    label: '整理画布布局',
+    description: '把画布节点按类型 / 连线层级自动排布（横向或纵向），或按角色场景分组整理。',
+    requiresApproval: false,
+    argsSchema: {
+      mode: 'string 可选，tree-h（横向树）/ tree-v（纵向树）/ by-role（按角色场景分组），默认 tree-h',
+    },
+  },
+  {
+    name: 'shot.preview',
+    label: '智能预演分镜',
+    description: '为一组镜头统一规划关键分镜图（首帧），保持多镜头人物与空间一致，再生成视频。',
+    requiresApproval: false,
+    argsSchema: {
+      shotIds: 'string[] 可选，要预演的镜头 ID；不填则选当前未生成首帧的连续镜头（2 个以上）',
+    },
+  },
+  {
+    name: 'replicate.analyze',
+    label: '爆款复刻分析',
+    description: '解析参考视频 / 文案的爆款 DNA（钩子、结构、画风），并据此产出新剧本大纲。',
+    requiresApproval: false,
+    argsSchema: {
+      reference: 'string 必填，参考视频链接或文案文本',
+      keepStyle: 'boolean 可选，是否沿用参考的画风与节奏，默认 true',
+    },
+  },
+  {
     name: 'finish',
     label: '完成并汇报',
     description: '结束执行并给出总结。',

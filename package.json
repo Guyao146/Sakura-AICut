@@ -1,6 +1,6 @@
 {
   "name": "sakura-aicut",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
   "description": "Sakura AI Cut - 无限画布 AI 短剧 / 电影生成与剪辑平台",
   "license": "LGPL-2.1-only",
@@ -16,6 +16,7 @@
     "start:web": "pnpm --filter @sakura/web start",
     "start:worker": "pnpm --filter @sakura/worker start",
     "typecheck": "pnpm -r typecheck",
+    "bump": "node scripts/bump-version.mjs",
     "db:migrate": "pnpm --filter @sakura/db migrate",
     "db:reset": "pnpm --filter @sakura/db reset",
     "docker:up": "docker compose up -d --build",

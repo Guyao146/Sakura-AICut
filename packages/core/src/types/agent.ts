@@ -19,6 +19,11 @@ export type AgentToolName =
   | 'timeline.build'
   | 'timeline.render'
   | 'prompt.lookup'
+  | 'canvas.create_item'
+  | 'canvas.generate_image'
+  | 'canvas.organize'
+  | 'shot.preview'
+  | 'replicate.analyze'
   | 'finish';
 
 export interface AgentStep {

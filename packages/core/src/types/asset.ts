@@ -68,6 +68,32 @@ export const CANVAS_ITEM_KIND_LABELS: Record<CanvasItemKind, string> = {
   audio: '语音',
 };
 
+/**
+ * 画布节点的「角色」：对齐小云雀资产创作画布
+ * - text/image/video/audio 为基础节点
+ * - character/scene/prop 为资产节点：富含结构化字段，可被分镜故事板自动调用
+ */
+export type CanvasNodeRole = 'plain' | 'character' | 'scene' | 'prop';
+
+export const CANVAS_NODE_ROLE_LABELS: Record<CanvasNodeRole, string> = {
+  plain: '基础节点',
+  character: '角色节点',
+  scene: '场景节点',
+  prop: '道具节点',
+};
+
+/** 抽卡记录：同一提示词多次生成的结果折叠为一组 */
+export interface CanvasItemVariant {
+  /** 媒体 ID */
+  mediaId: ID;
+  /** 媒体 URL */
+  url: string;
+  /** 生成时的提示词快照 */
+  prompt?: string | null;
+  /** 生成时间 */
+  createdAt: ISODateTime;
+}
+
 export interface CanvasItem extends Timestamps {
   id: ID;
   projectId: ID;
@@ -88,6 +114,14 @@ export interface CanvasItem extends Timestamps {
   z: number;
   /** 旋转角度（度） */
   rotation?: number;
+  /** 节点角色：基础 / 角色 / 场景 / 道具（资产节点） */
+  role?: CanvasNodeRole;
+  /** 关联的剧本人物 / 场景 / 道具 ID（资产节点） */
+  refId?: ID | null;
+  /** 角色音色参考（声音克隆 / 音色模仿，资产节点） */
+  voiceRefMediaId?: ID | null;
+  /** 抽卡记录：历史生成结果折叠展示，当前展示项为 mediaId */
+  variants?: CanvasItemVariant[];
 }
 
 /** 画布连线（表达素材间的叙事顺序 / 引用关系） */

@@ -81,7 +81,8 @@ export async function saveMedia(
   const absolute = join(dir, filename);
   writeFileSync(absolute, buffer);
 
-  const relative = join(projectId, filename).replace(/\\/g, '/');
+  // path / url 必须带 media 前缀，与 upload 动作及 /api/files 路由、resolveMediaPath 的解析口径一致
+  const relative = join('media', projectId, filename).replace(/\\/g, '/');
   return { url: `/api/files/${relative}`, path: relative, mime, fileSize: buffer.byteLength };
 }
 

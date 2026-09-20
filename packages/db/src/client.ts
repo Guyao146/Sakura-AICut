@@ -49,8 +49,21 @@ export function ensureDir(dir: string): string {
 /** 解析 schema.sql 的位置（兼容本地开发、Monorepo、Docker 镜像三种情况） */
 function applyMigrations(db: DatabaseSync): void {
   db.exec(SCHEMA_SQL);
+  // CREATE TABLE IF NOT EXISTS 不会给老库加列，这里按需幂等补列
+  ensureColumn(db, 'shots', 'dubbing_media_id', 'TEXT');
+  ensureColumn(db, 'canvas_items', 'role', "TEXT NOT NULL DEFAULT 'plain'");
+  ensureColumn(db, 'canvas_items', 'ref_id', 'TEXT');
+  ensureColumn(db, 'canvas_items', 'voice_ref_media_id', 'TEXT');
+  ensureColumn(db, 'canvas_items', 'variants_json', "TEXT NOT NULL DEFAULT '[]'");
   const now = new Date().toISOString();
   db.prepare('INSERT OR REPLACE INTO migrations (id, applied_at) VALUES (?, ?)').run('0001_init', now);
+}
+
+/** 幂等加列：老库升级用 */
+function ensureColumn(db: DatabaseSync, table: string, column: string, definition: string): void {
+  const rows = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
+  if (rows.some((row) => row.name === column)) return;
+  db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
 }
 
 /** 获取数据库连接（单例） */

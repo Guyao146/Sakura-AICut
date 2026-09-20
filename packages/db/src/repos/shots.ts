@@ -28,6 +28,7 @@ interface ShotRow {
   last_frame_media_id: string | null;
   clip_media_ids_json: string;
   selected_media_id: string | null;
+  dubbing_media_id: string | null;
   status: string;
   error: string | null;
   sort_order: number;
@@ -58,6 +59,7 @@ function mapShot(row: ShotRow): Shot {
     lastFrameMediaId: row.last_frame_media_id,
     clipMediaIds: parseJson<string[]>(row.clip_media_ids_json, []),
     selectedMediaId: row.selected_media_id,
+    dubbingMediaId: row.dubbing_media_id,
     status: row.status as TaskStatus,
     error: row.error,
     order: row.sort_order,
@@ -93,9 +95,9 @@ export function createShot(projectId: string, input: ShotInput): Shot {
   db.prepare(
     `INSERT INTO shots (id, project_id, idx, beat_id, episode, description, dialogue, narration, duration_sec, shot_size,
       camera_template_id, camera_prompt, character_ids_json, prop_ids_json, location_id, prompt, negative_prompt,
-      first_frame_media_id, last_frame_media_id, clip_media_ids_json, selected_media_id, status, error, sort_order,
+      first_frame_media_id, last_frame_media_id, clip_media_ids_json, selected_media_id, dubbing_media_id, status, error, sort_order,
       created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     id,
     projectId,
@@ -118,6 +120,7 @@ export function createShot(projectId: string, input: ShotInput): Shot {
     input.lastFrameMediaId ?? null,
     toJson(input.clipMediaIds ?? []),
     input.selectedMediaId ?? null,
+    input.dubbingMediaId ?? null,
     input.status ?? 'pending',
     input.error ?? null,
     input.order ?? orderRow?.next ?? 0,
@@ -149,6 +152,7 @@ export function updateShot(
     lastFrameMediaId: string | null;
     clipMediaIds: string[];
     selectedMediaId: string | null;
+    dubbingMediaId: string | null;
     status: TaskStatus;
     error: string | null;
     order: number;
@@ -174,6 +178,7 @@ export function updateShot(
     lastFrameMediaId: 'last_frame_media_id',
     clipMediaIds: 'clip_media_ids_json',
     selectedMediaId: 'selected_media_id',
+    dubbingMediaId: 'dubbing_media_id',
     status: 'status',
     error: 'error',
     order: 'sort_order',

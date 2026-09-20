@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import clsx from 'clsx';
 import type { AppSettings } from '@sakura/db';
-import type { Capability, ProviderProtocol } from '@sakura/core';
+import type { Capability, ModelEntry, ProviderProtocol } from '@sakura/core';
 import { CameraTab, GeneralTab, ModelsTab, PromptsTab, ProvidersTab } from './SettingsTabs';
 
 /**
@@ -17,7 +17,7 @@ export interface SettingsData {
     protocol: ProviderProtocol;
     baseUrl: string;
     enabled: boolean;
-    models: Array<{ id: string; label: string; capability: Capability }>;
+    models: ModelEntry[];
     remark?: string | null;
   }>;
   routes: Array<{ capability: Capability; providerId: string; modelId: string }>;

@@ -82,6 +82,8 @@ export interface Shot extends Timestamps {
   clipMediaIds: ID[];
   /** 选中的片段（进入时间线） */
   selectedMediaId?: ID | null;
+  /** 台词配音生成的音频（TTS），与视频片段对齐进时间线 */
+  dubbingMediaId?: ID | null;
   status: TaskStatus;
   error?: string | null;
   /** 列表排序/画布坐标 */
@@ -93,4 +95,21 @@ export interface ShotGroup {
   beatId: ID;
   title: string;
   shots: Shot[];
+}
+
+/**
+ * 智能预演（⑦，对齐小云雀智能预演）
+ *
+ * 为一组镜头统一规划关键分镜图（首帧），再批量生成视频，
+ * 保持多镜头间人物动作、运镜关系与空间逻辑一致，大幅降低抽卡率。
+ */
+export interface ShotPreviewPlan {
+  /** 参与预演的镜头 ID（按顺序） */
+  shotIds: ID[];
+  /** 统一的角色锁定提示词（从剧本人物卡派生，保证一致性） */
+  consistencyPrompt: string;
+  /** 统一的场景锁定提示词 */
+  scenePrompt: string;
+  /** 每个镜头的关键帧提示词 */
+  framePrompts: Array<{ shotId: ID; prompt: string }>;
 }

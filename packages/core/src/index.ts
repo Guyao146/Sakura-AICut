@@ -13,6 +13,7 @@ export * from './types/shot';
 export * from './types/timeline';
 export * from './types/provider';
 export * from './types/job';
+export * from './types/redraw';
 export * from './types/agent';
 export * from './types/prompt';
 
@@ -22,12 +23,18 @@ export * from './types/prompt';
 export * from './utils/id';
 export * from './utils/text';
 
+// 版本号（由 pnpm bump 同步）
+export { APP_VERSION } from './version';
+
 // 供应商预设与协议类型（纯数据）
 export * from './ai/presets';
 export type {
   AdapterContext,
+  AudioGenerateRequest,
+  AudioGenerateResult,
   AsyncTaskHandle,
   AsyncTaskState,
+  BalanceResult,
   ChatMessage,
   GeneratedImage,
   ImageGenerateRequest,
@@ -46,6 +53,7 @@ export * from './prompt/library';
 export * from './prompt/assistant-prompts';
 export * from './prompt/templates';
 export * from './prompt/build';
+export * from './prompt/node-tools';
 
 // 流程
 export * from './pipeline/steps';

@@ -1,6 +1,8 @@
 import type {
   AsyncTaskHandle,
   AsyncTaskState,
+  AudioGenerateRequest,
+  AudioGenerateResult,
   Capability,
   ChatMessage,
   ImageGenerateRequest,
@@ -74,6 +76,20 @@ export async function runImage(
   return { ...result, providerId: route.provider.id, providerName: route.provider.name };
 }
 
+/** 语音合成（同步返回音频字节流） */
+export async function runAudio(
+  input: Omit<AudioGenerateRequest, 'model'> & { model?: string; override?: RouteOverride },
+): Promise<AudioGenerateResult & { providerId: string; providerName: string }> {
+  const route = routeFor('audio', input.override);
+  if (!route.adapter.audio) throw new Error(`供应商「${route.provider.name}」不支持语音合成`);
+  const result = await route.adapter.audio(route.ctx, {
+    ...input,
+    model: input.model ?? route.model.id,
+    params: { ...(route.model.defaultParams ?? {}), ...(input.params ?? {}) },
+  });
+  return { ...result, providerId: route.provider.id, providerName: route.provider.name };
+}
+
 /** 提交视频任务（异步） */
 export async function submitVideo(
   input: Omit<VideoGenerateRequest, 'model'> & { model?: string; override?: RouteOverride },
@@ -112,4 +128,25 @@ export async function probeProvider(providerId: string) {
     extraHeaders: provider.extraHeaders,
     timeoutSec: provider.timeoutSec ?? 60,
   });
+}
+
+/** 供应商余额查询（尽力而为，不支持时抛出可读错误） */
+export async function fetchProviderBalance(providerId: string) {
+  const providers = listProviders();
+  const provider = providers.find((item) => item.id === providerId);
+  if (!provider) throw new Error(`供应商不存在：${providerId}`);
+  const adapter = getAdapter(provider.protocol);
+  if (!adapter.fetchBalance) {
+    return { supported: false as const, detail: `「${provider.name}」暂不支持余额查询（仅 OpenAI 兼容 / NewAPI / OneAPI 支持）` };
+  }
+  const result = await adapter.fetchBalance({
+    providerId: provider.id,
+    providerName: provider.name,
+    baseUrl: provider.baseUrl,
+    credentials: provider.credentials ?? {},
+    extraHeaders: provider.extraHeaders,
+    timeoutSec: provider.timeoutSec ?? 60,
+  });
+  if (!result) return { supported: false as const, detail: `「${provider.name}」余额查询失败：接口未返回有效数据` };
+  return { supported: true as const, ...result };
 }

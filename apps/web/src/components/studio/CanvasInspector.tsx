@@ -3,7 +3,7 @@
 import clsx from 'clsx';
 import { Badge, Button } from '@/components/ui';
 import type { CanvasItem } from '@sakura/core';
-import { CANVAS_ITEM_KIND_LABELS } from '@sakura/core';
+import { CANVAS_ITEM_KIND_LABELS, CANVAS_NODE_ROLE_LABELS } from '@sakura/core';
 
 interface CanvasInspectorProps {
   item: CanvasItem | null;
@@ -60,9 +60,35 @@ export function CanvasInspector({
             if (e.target.value !== item.text) void onUpdate({ text: e.target.value });
           }}
           className="field w-full resize-none text-xs"
-          placeholder="输入文本内容…"
+          placeholder="输入文本内容，可输入 @ 引用素材…"
         />
       </div>
+
+      {/* ⑨ 资产节点角色 */}
+      {item.role && item.role !== 'plain' ? (
+        <div className="mb-2">
+          <Badge tone="blue">{CANVAS_NODE_ROLE_LABELS[item.role]}</Badge>
+          {item.refId ? <span className="ml-2 text-[10px] text-slate-500">已关联剧本实体</span> : null}
+        </div>
+      ) : null}
+
+      {/* ① 抽卡记录缩略 */}
+      {(item.variants?.length ?? 0) > 0 ? (
+        <div className="mb-2">
+          <label className="form-label text-[11px]">抽卡记录（{item.variants!.length}）</label>
+          <div className="flex flex-wrap gap-1">
+            {item.variants!.slice(-6).map((variant) => (
+              <img
+                key={variant.mediaId}
+                src={variant.url}
+                alt={variant.prompt ?? '抽卡记录'}
+                title={variant.prompt ?? ''}
+                className="size-12 rounded border border-[#333b4a] object-cover"
+              />
+            ))}
+          </div>
+        </div>
+      ) : null}
 
       {item.url ? (
         <div className="mb-2">

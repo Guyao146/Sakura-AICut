@@ -14,6 +14,7 @@ import {
   listCanvasItems,
   listCanvasEdges,
   listCanvasGroups,
+  listScreenplayVersions,
   mapItemGroups,
 } from '@sakura/db';
 import { connectedRoutesSummary } from '@/lib/server/ai';
@@ -43,6 +44,7 @@ export default async function StudioPage({ params }: { params: Promise<{ project
   const canvasEdges = listCanvasEdges(projectId);
   const canvasGroups = listCanvasGroups(projectId);
   const itemGroups = mapItemGroups(projectId);
+  const screenplayVersions = listScreenplayVersions(projectId);
   const chat = listChatMessages(projectId, 'screenplay', 80);
   const promptTemplates = listPromptTemplates();
   const cameraMoves = [...builtinCameraMoves(), ...listCustomCameraMoves(projectId)];
@@ -57,6 +59,7 @@ export default async function StudioPage({ params }: { params: Promise<{ project
       data={{
         project: content.project,
         screenplay: content.screenplay,
+        screenplayVersions,
         assets: content.assets,
         shots: content.shots,
         timeline: content.timeline,

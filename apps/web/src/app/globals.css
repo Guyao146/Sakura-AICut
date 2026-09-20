@@ -52,6 +52,124 @@ body {
   display: none;
 }
 
+/* ---------- 节点白框修复：缩放手柄/选中框适配暗色樱花主题 ---------- */
+/* 注意：@xyflow/react 的样式表在本文件之后加载，同优先级下会覆盖，因此关键属性用 !important 提权 */
+.react-flow__resize-control.handle {
+  border: 1px solid var(--color-ink-900) !important;
+  border-radius: 4px !important;
+  background-color: var(--color-sakura-500) !important;
+  box-shadow: 0 0 0 1px rgba(244, 114, 182, 0.35), 0 1px 4px rgba(0, 0, 0, 0.5);
+  transition: transform 0.12s ease;
+}
+.react-flow__resize-control.handle:hover {
+  transform: scale(1.35);
+  background-color: var(--color-sakura-400) !important;
+}
+.react-flow__resize-control.line {
+  border-color: rgba(244, 114, 182, 0.45) !important;
+}
+/* 框选多节点时的选区 */
+.react-flow__nodesselection-rect,
+.react-flow__selection {
+  background: rgba(244, 114, 182, 0.06);
+  border: 1px dashed rgba(244, 114, 182, 0.75) !important;
+}
+/* 连线动画更顺滑 */
+.react-flow__edge path {
+  transition: stroke 0.15s ease;
+}
+.react-flow__edge:hover path {
+  stroke: var(--color-sakura-400);
+}
+.react-flow__edge.animated path {
+  stroke-dasharray: 6 4 !important;
+  animation: edge-dash 0.6s linear infinite;
+}
+@keyframes edge-dash {
+  to {
+    stroke-dashoffset: -10;
+  }
+}
+
+/* ---------- 通用动画 ---------- */
+@keyframes pop-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+  60% {
+    transform: scale(1.02);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes shimmer {
+  0% {
+    background-position: -160% 0;
+  }
+  100% {
+    background-position: 260% 0;
+  }
+}
+
+.animate-pop-in {
+  animation: pop-in 0.28s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.animate-fade-in-up {
+  animation: fade-in-up 0.3s ease both;
+}
+.animate-fade-in {
+  animation: fade-in 0.3s ease both;
+}
+
+/* 玻璃拟态工具栏 */
+.glass-panel {
+  background: rgba(18, 21, 28, 0.86);
+  backdrop-filter: blur(10px) saturate(1.2);
+  -webkit-backdrop-filter: blur(10px) saturate(1.2);
+}
+
+/* 节点悬浮抬起效果 */
+.node-lift {
+  transition:
+    transform 0.16s ease,
+    box-shadow 0.16s ease,
+    border-color 0.16s ease;
+}
+.node-lift:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    0 8px 22px rgba(0, 0, 0, 0.5),
+    0 0 0 1px rgba(244, 114, 182, 0.25);
+}
+
+/* 骨架屏微光 */
+.skeleton-shimmer {
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.02) 0%, rgba(255, 255, 255, 0.08) 50%, rgba(255, 255, 255, 0.02) 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s linear infinite;
+}
+
 /* 通用控件 */
 .field {
   width: 100%;
