@@ -14,6 +14,7 @@ import {
   type Edge,
   type Node,
   type NodeChange,
+  type OnSelectionChangeParams,
   useEdgesState,
   useNodesState,
   useReactFlow,
@@ -586,6 +587,14 @@ function CanvasInner({ data, projectId }: { data: StudioData; projectId: string 
   const [rfEdges, setRfEdges, onRfEdgesChange] = useEdgesState<Edge>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
+  // React Flow 的 selection effect 依赖回调引用，内联回调会与 setState 形成更新循环。
+  const handleSelectionChange = useCallback(({ nodes }: OnSelectionChangeParams) => {
+    const next = nodes.map((node) => node.id);
+    setSelectedIds((prev) =>
+      prev.length === next.length && prev.every((id, index) => id === next[index]) ? prev : next,
+    );
+  }, []);
+
   // 从数据库初始连线
   useEffect(() => {
     setRfEdges(
@@ -600,32 +609,36 @@ function CanvasInner({ data, projectId }: { data: StudioData; projectId: string 
     );
   }, [data.canvasEdges, setRfEdges]);
 
-  // 分组背景节点（垫在素材下方）
-  const groupNodes: Node[] = groups.map((group) => ({
-    id: group.id,
-    data: {
-      item: {
-        id: group.id,
-        projectId,
-        kind: 'text',
-        text: group.name,
-        x: group.x,
-        y: group.y,
-        width: group.width,
-        height: group.height,
-        z: group.z,
-      } as CanvasItem,
-      isGroup: true,
-      groupColor: group.color,
-    },
-    position: { x: group.x, y: group.y },
-    style: { width: group.width, height: group.height, zIndex: group.z },
-    draggable: false,
-    selectable: false,
-    type: 'group',
-  }));
+  // 分组背景节点（垫在素材下方），仅在分组数据变化时重建
+  const groupNodes = useMemo<Node[]>(
+    () => groups.map((group) => ({
+      id: group.id,
+      data: {
+        item: {
+          id: group.id,
+          projectId,
+          kind: 'text',
+          text: group.name,
+          x: group.x,
+          y: group.y,
+          width: group.width,
+          height: group.height,
+          z: group.z,
+        } as CanvasItem,
+        isGroup: true,
+        groupColor: group.color,
+      },
+      position: { x: group.x, y: group.y },
+      style: { width: group.width, height: group.height, zIndex: group.z },
+      draggable: false,
+      selectable: false,
+      type: 'group',
+    })),
+    [groups, projectId],
+  );
 
-  const allNodes = [...groupNodes, ...rfNodes];
+  // 连线、选中状态等变化不应导致 React Flow 重新同步整个节点数组。
+  const allNodes = useMemo(() => [...groupNodes, ...rfNodes], [groupNodes, rfNodes]);
 
   // 节点数量或内容变化（新建/删除/生成完成）时重建，拖动中的位置由 ReactFlow 内部维护
   const itemContentKey = items
@@ -1119,9 +1132,7 @@ function CanvasInner({ data, projectId }: { data: StudioData; projectId: string 
             }
           }
         }}
-        onSelectionChange={(selection) => {
-          setSelectedIds(selection.nodes.map((n) => n.id));
-        }}
+        onSelectionChange={handleSelectionChange}
         onConnect={onConnect}
         onNodeDragStop={(_, node) => {
           setItems((prev) => prev.map((it) => (it.id === node.id ? { ...it, x: node.position.x, y: node.position.y } : it)));
