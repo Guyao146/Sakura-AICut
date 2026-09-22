@@ -236,21 +236,86 @@ function CanvasItemNode({ data, selected }: { data: CanvasItemNodeData; selected
     };
 
     const variants = item.variants ?? [];
-    const options: MenuItem[] = [
-      { label: '编辑', icon: '✏️', action: () => { if (item.kind === 'text') setEditing(true); }, hide: item.kind !== 'text' },
-      { label: '生成图片', icon: '✨', action: () => onGenerate?.([item.id]), hide: !item.text.trim() || !onGenerate },
-      { label: `抽卡记录 (${variants.length})`, icon: '🃏', action: () => showVariantsSubmenu(), hide: variants.length === 0 || !onSelectVariant },
-      { label: '反解析提示词', icon: '🔍', action: () => onReverseParse?.(item.id), hide: item.kind !== 'image' || !onReverseParse },
-      { label: '智能打光…', icon: '💡', action: () => showRelightSubmenu(), hide: !onRelight },
-      { label: '镜头角度…', icon: '🎥', action: () => showAngleSubmenu(), hide: !onAdjustAngle },
-      { label: '插入运镜…', icon: '🎬', action: () => showCameraMovesSubmenu(), hide: !onInsertCameraMove },
-      { label: '关联资产…', icon: '🔗', action: () => showLinkAssetSubmenu(), hide: !onLinkAsset || !screenplayEntities },
-      { label: '发到镜头首帧…', icon: '➤', action: () => showShotSubmenu('first'), hide: item.kind !== 'image' || !item.mediaId || !onSendToShot },
-      { label: '发到镜头尾帧…', icon: '➤', action: () => showShotSubmenu('last'), hide: item.kind !== 'image' || !item.mediaId || !onSendToShot },
+
+    /** 通用尾部项：所有节点共享 */
+    const commonOptions: MenuItem[] = [
       { label: '置顶', icon: '⬆️', action: () => void onBringToFront() },
-      { label: groupId ? '解组' : '成组（需多选）', icon: '🎬', action: () => void (groupId ? onUngroup?.() : onGroup?.()), hide: !groupId && !onGroup },
+      {
+        label: groupId ? '解组' : '成组（需多选）',
+        icon: '🎬',
+        action: () => void (groupId ? onUngroup?.() : onGroup?.()),
+        hide: !groupId && !onGroup,
+      },
       { label: '删除', icon: '🗑️', action: () => void onDelete(), danger: true },
     ];
+
+    /** AI 工具组：仅图片 / 视频节点出现 */
+    const aiToolOptions: MenuItem[] = [
+      { label: '智能打光…', icon: '💡', action: () => showRelightSubmenu(), hide: !onRelight || item.kind !== 'image' },
+      {
+        label: '镜头角度…',
+        icon: '🎥',
+        action: () => showAngleSubmenu(),
+        hide: !onAdjustAngle || (item.kind !== 'image' && item.kind !== 'video'),
+      },
+      { label: '插入运镜…', icon: '🎬', action: () => showCameraMovesSubmenu(), hide: !onInsertCameraMove },
+      {
+        label: '关联资产…',
+        icon: '🔗',
+        action: () => showLinkAssetSubmenu(),
+        hide: !onLinkAsset || !screenplayEntities,
+      },
+    ];
+
+    /** 按节点类型给出不同菜单 */
+    let options: MenuItem[];
+    if (item.kind === 'text') {
+      // 文字节点：编辑 + 生图 + 运镜/资产
+      options = [
+        { label: '编辑', icon: '✏️', action: () => setEditing(true) },
+        { label: '生成图片', icon: '✨', action: () => onGenerate?.([item.id]), hide: !item.text.trim() || !onGenerate },
+        { label: '插入运镜…', icon: '🎬', action: () => showCameraMovesSubmenu(), hide: !onInsertCameraMove },
+        {
+          label: '关联资产…',
+          icon: '🔗',
+          action: () => showLinkAssetSubmenu(),
+          hide: !onLinkAsset || !screenplayEntities,
+        },
+        ...commonOptions,
+      ];
+    } else if (item.kind === 'image') {
+      // 图片节点：全量能力
+      options = [
+        { label: '生成图片', icon: '✨', action: () => onGenerate?.([item.id]), hide: !item.text.trim() || !onGenerate },
+        {
+          label: `抽卡记录 (${variants.length})`,
+          icon: '🃏',
+          action: () => showVariantsSubmenu(),
+          hide: variants.length === 0 || !onSelectVariant,
+        },
+        { label: '反解析提示词', icon: '🔍', action: () => onReverseParse?.(item.id), hide: !onReverseParse },
+        ...aiToolOptions,
+        {
+          label: '发到镜头首帧…',
+          icon: '➤',
+          action: () => showShotSubmenu('first'),
+          hide: !item.mediaId || !onSendToShot,
+        },
+        {
+          label: '发到镜头尾帧…',
+          icon: '➤',
+          action: () => showShotSubmenu('last'),
+          hide: !item.mediaId || !onSendToShot,
+        },
+        ...commonOptions,
+      ];
+    } else if (item.kind === 'video') {
+      // 视频节点：镜头调节 + 资产关联
+      options = [...aiToolOptions, ...commonOptions];
+    } else {
+      // 语音节点：仅基础操作
+      options = [...commonOptions];
+    }
     openContextMenu(options, e.clientX, e.clientY);
   };
 
@@ -368,7 +433,13 @@ function GroupNode({ data }: { data: { item: CanvasItem; groupColor?: string } }
 
 // 稳定的类型映射：放在组件外部，避免每次渲染重建导致节点闪烁/卡顿
 const NODE_TYPES = { default: CanvasItemNode as any, group: GroupNode as any };
-const EDGE_TYPES = { default: undefined as any };
+
+/** 连线默认样式：直线 + 樱花粉流动虚线。数据库连线与新建连线共享同一份配置 */
+const DEFAULT_EDGE_OPTIONS = {
+  type: 'straight' as const,
+  animated: true,
+  style: { stroke: '#f472b6', strokeWidth: 2 },
+};
 
 function CanvasInner({ data, projectId }: { data: StudioData; projectId: string }) {
   const [items, setItems] = useState<CanvasItem[]>(data.canvasItems);
@@ -626,8 +697,6 @@ function CanvasInner({ data, projectId }: { data: StudioData; projectId: string 
         id: edge.id,
         source: edge.sourceId,
         target: edge.targetId,
-        animated: true,
-        style: { stroke: '#f472b6', strokeWidth: 2 },
         label: edge.label || undefined,
       })),
     );
@@ -683,9 +752,7 @@ function CanvasInner({ data, projectId }: { data: StudioData; projectId: string 
       if (!connection.source || !connection.target) return;
       // 乐观更新：立即显示连线
       const tempId = `temp_edge_${Date.now()}`;
-      setRfEdges((eds) =>
-        addEdge({ ...connection, id: tempId, animated: true, style: { stroke: '#f472b6', strokeWidth: 2 } } as Edge, eds),
-      );
+      setRfEdges((eds) => addEdge({ ...connection, id: tempId, ...DEFAULT_EDGE_OPTIONS } as Edge, eds));
       createCanvasEdgeAction(projectId, connection.source, connection.target)
         .then((result) => {
           if (result.ok && result.data) {
@@ -1152,7 +1219,7 @@ function CanvasInner({ data, projectId }: { data: StudioData; projectId: string 
         deleteKeyCode={['Backspace', 'Delete']}
         multiSelectionKeyCode={['Meta', 'Control']}
         nodeTypes={NODE_TYPES}
-        edgeTypes={EDGE_TYPES}
+        defaultEdgeOptions={DEFAULT_EDGE_OPTIONS}
         onNodesChange={handleNodesChange}
         onEdgesChange={(changes) => {
           onRfEdgesChange(changes);

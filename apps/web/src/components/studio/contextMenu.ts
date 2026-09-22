@@ -35,13 +35,9 @@ export function openContextMenu(items: MenuItem[], x: number, y: number): HTMLEl
 
   const menu = document.createElement('div');
   menu.setAttribute(MENU_ATTR, 'true');
+  // 宽度由内容决定（w-max），不再用 min-w 撑出右侧空白
   menu.className =
-    'fixed z-50 min-w-[150px] rounded-lg border border-[#333b4a] bg-[#1a1f2e] py-1 text-xs shadow-xl shadow-black/50 animate-fade-in';
-  // 防止菜单超出视口
-  const estimateW = 200;
-  const estimateH = items.filter((i) => !i.hide).length * 32 + 16;
-  menu.style.left = `${Math.min(x, window.innerWidth - estimateW - 8)}px`;
-  menu.style.top = `${Math.min(y, window.innerHeight - estimateH - 8)}px`;
+    'fixed z-50 w-max rounded-lg border border-[#333b4a] bg-[#1a1f2e] py-1 text-xs shadow-xl shadow-black/50 animate-fade-in';
 
   for (const item of items) {
     if (item.hide) continue;
@@ -49,8 +45,8 @@ export function openContextMenu(items: MenuItem[], x: number, y: number): HTMLEl
     btn.type = 'button';
     btn.textContent = item.icon ? `${item.icon} ${item.label}` : item.label;
     btn.className = item.danger
-      ? 'w-full text-left px-3 py-1.5 text-red-300 transition-colors hover:bg-red-500/10'
-      : 'w-full text-left px-3 py-1.5 text-slate-200 transition-colors hover:bg-white/5';
+      ? 'block w-full text-left px-3 py-1.5 text-red-300 transition-colors hover:bg-red-500/10'
+      : 'block w-full text-left px-3 py-1.5 text-slate-200 transition-colors hover:bg-white/5';
     btn.onclick = async (event) => {
       event.stopPropagation();
       closeAllContextMenus();
@@ -60,6 +56,12 @@ export function openContextMenu(items: MenuItem[], x: number, y: number): HTMLEl
   }
 
   document.body.appendChild(menu);
+
+  // append 后实测尺寸，保证菜单不超出视口
+  const rect = menu.getBoundingClientRect();
+  menu.style.left = `${Math.min(Math.max(8, x), window.innerWidth - rect.width - 8)}px`;
+  menu.style.top = `${Math.min(Math.max(8, y), window.innerHeight - rect.height - 8)}px`;
+
   return menu;
 }
 
