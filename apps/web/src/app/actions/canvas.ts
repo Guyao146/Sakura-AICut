@@ -23,7 +23,7 @@ import {
   mapItemGroups,
 } from '@sakura/db';
 import type { CanvasItem, CanvasEdge, CanvasGroup, CanvasItemKind } from '@sakura/core';
-import { CANVAS_TEMPLATES } from '@sakura/core';
+import { CANVAS_TEMPLATES, DEFAULT_NODE_SIZE } from '@sakura/core';
 import type { ActionResult } from './project';
 import { enqueueCanvasGenerate } from '@/lib/server/jobs';
 
@@ -289,6 +289,30 @@ export async function applyCanvasTemplateAction(
   }
 }
 
+/**
+ * 一键恢复所有节点为统一默认尺寸（不动位置/层级/内容）。
+ * 用于画布被缩放得参差不齐时快速「拉平」视觉。
+ */
+export async function resetCanvasItemSizesAction(projectId: string): Promise<ActionResult<CanvasItem[]>> {
+  try {
+    const items = listCanvasItems(projectId);
+    const reset: CanvasItem[] = [];
+    for (const item of items) {
+      if (item.width === DEFAULT_NODE_SIZE.width && item.height === DEFAULT_NODE_SIZE.height) {
+        reset.push(item);
+        continue;
+      }
+      reset.push(
+        updateCanvasItem(item.id, { width: DEFAULT_NODE_SIZE.width, height: DEFAULT_NODE_SIZE.height }),
+      );
+    }
+    refresh(projectId);
+    return { ok: true, data: reset };
+  } catch (error) {
+    return toError(error);
+  }
+}
+
 /* ------------------------------ 分镜批量导入 ------------------------------ */
 
 export interface ShotImportRow {
@@ -328,8 +352,8 @@ export async function importShotsToCanvasAction(
         mediaId: shot.selectedMediaId ?? null,
         x: col * (CELL_W + GAP),
         y: row * (CELL_H + GAP),
-        width: kind === 'video' ? 480 : kind === 'image' ? 360 : 320,
-        height: kind === 'text' ? 180 : 270,
+        width: DEFAULT_NODE_SIZE.width,
+        height: DEFAULT_NODE_SIZE.height,
         z: 1,
       });
       created.push(item);

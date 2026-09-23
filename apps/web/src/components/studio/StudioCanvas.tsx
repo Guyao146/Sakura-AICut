@@ -49,6 +49,7 @@ import {
   adjustNodeCameraAngleAction,
   insertCameraMoveAction,
   linkNodeToAssetAction,
+  resetCanvasItemSizesAction,
 } from '@/app/actions/canvas';
 import { CanvasInspector } from './CanvasInspector';
 import { GroupDialog } from './GroupDialog';
@@ -59,6 +60,7 @@ import {
   CANVAS_ITEM_KIND_LABELS,
   CANVAS_NODE_ROLE_LABELS,
   CANVAS_TEMPLATES,
+  DEFAULT_NODE_SIZE,
   builtinCameraMoves,
 } from '@sakura/core';
 import { setShotFrameAction } from '@/app/actions/production';
@@ -322,7 +324,7 @@ function CanvasItemNode({ data, selected }: { data: CanvasItemNodeData; selected
   return (
     <div
       className={clsx(
-        'node-lift relative flex h-full w-full min-w-0 flex-col rounded-xl border bg-[#12151c] p-2 shadow-lg shadow-black/40',
+        'node-lift animate-pop-in relative flex h-full w-full min-w-0 flex-col rounded-xl border bg-[#12151c] p-2 shadow-lg shadow-black/40',
         selected
           ? 'border-pink-400/60 ring-1 ring-pink-400/40'
           : 'border-[#2b3240] hover:border-pink-400/30',
@@ -434,9 +436,9 @@ function GroupNode({ data }: { data: { item: CanvasItem; groupColor?: string } }
 // 稳定的类型映射：放在组件外部，避免每次渲染重建导致节点闪烁/卡顿
 const NODE_TYPES = { default: CanvasItemNode as any, group: GroupNode as any };
 
-/** 连线默认样式：直线 + 樱花粉流动虚线。数据库连线与新建连线共享同一份配置 */
+/** 连线默认样式：贝塞尔曲线 + 樱花粉流动虚线。数据库连线与新建连线共享同一份配置 */
 const DEFAULT_EDGE_OPTIONS = {
-  type: 'straight' as const,
+  type: 'bezier' as const,
   animated: true,
   style: { stroke: '#f472b6', strokeWidth: 2 },
 };
@@ -449,8 +451,10 @@ function CanvasInner({ data, projectId }: { data: StudioData; projectId: string 
 
   /* ------------------------- 可拖动工具栏（dock） ------------------------- */
   const paneRef = useRef<HTMLDivElement>(null);
-  const [dockPos, setDockPos] = useState(() => {
-    if (typeof window === 'undefined') return { x: 12, y: 12 };
+  const dockRef = useRef<HTMLDivElement>(null);
+  // dock 位置：null 表示用「默认底部居中」布局；用户拖动后保存为绝对坐标
+  const [dockPos, setDockPos] = useState<{ x: number; y: number } | null>(() => {
+    if (typeof window === 'undefined') return null;
     try {
       const saved = window.localStorage.getItem('sakura.dockPos');
       if (saved) {
@@ -460,16 +464,22 @@ function CanvasInner({ data, projectId }: { data: StudioData; projectId: string 
     } catch {
       /* localStorage 不可用时用默认值 */
     }
-    return { x: 12, y: 12 };
+    return null;
   });
 
   const handleDockDragStart = (event: React.PointerEvent<HTMLDivElement>) => {
     event.preventDefault();
     event.stopPropagation();
     const start = { x: event.clientX, y: event.clientY };
-    const origin = { ...dockPos };
+    // 从 DOM 实测当前位置作为起点：默认底部居中（带 transform）也能正确换算
+    const paneRect = paneRef.current?.getBoundingClientRect();
+    const dockRect = dockRef.current?.getBoundingClientRect();
+    const origin =
+      paneRect && dockRect
+        ? { x: dockRect.left - paneRect.left, y: dockRect.top - paneRect.top }
+        : { x: 12, y: 12 };
     const pane = paneRef.current;
-    // 用可变变量记录最新位置，松手时持久化（闭包里的 dockPos 是拖拽前的旧值）
+    // 用可变变量记录最新位置，松手时持久化
     let latest = origin;
     const onMove = (ev: PointerEvent) => {
       // 拖拽手柄最多移动到容器边缘，留出工具栏高度的一半
@@ -841,6 +851,27 @@ function CanvasInner({ data, projectId }: { data: StudioData; projectId: string 
     [projectId],
   );
 
+  // 一键恢复所有节点为统一默认尺寸
+  const handleResetSizes = useCallback(async () => {
+    const snapshot = items.map((it) => ({ ...it }));
+    // 乐观更新：本地立刻拉平，节点身份保持不变
+    setItems((prev) => prev.map((it) => ({ ...it, width: DEFAULT_NODE_SIZE.width, height: DEFAULT_NODE_SIZE.height })));
+    setRfNodes((prev) =>
+      prev.map((node) => ({ ...node, width: DEFAULT_NODE_SIZE.width, height: DEFAULT_NODE_SIZE.height })),
+    );
+    const result = await resetCanvasItemSizesAction(projectId);
+    if (!result.ok) {
+      setItems(snapshot);
+      setRfNodes((prev) =>
+        prev.map((node) => {
+          const old = snapshot.find((it) => it.id === node.id);
+          return old ? { ...node, width: old.width, height: old.height } : node;
+        }),
+      );
+      alert(result.error ?? '恢复尺寸失败');
+    }
+  }, [projectId, items]);
+
   // 从分镜批量导入
   const handleImportShots = useCallback(async () => {
     const shots = data.shots;
@@ -1112,8 +1143,8 @@ function CanvasInner({ data, projectId }: { data: StudioData; projectId: string 
       const newItem: CanvasItem = {
         id, projectId, kind, text: label, url: init?.url || '',
         x, y, z: Math.max(0, ...items.map((it) => it.z)) + 1,
-        width: kind === 'image' ? 300 : kind === 'video' ? 400 : 200,
-        height: kind === 'image' ? 300 : kind === 'video' ? 300 : kind === 'audio' ? 60 : 100,
+        width: DEFAULT_NODE_SIZE.width,
+        height: DEFAULT_NODE_SIZE.height,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
@@ -1249,10 +1280,11 @@ function CanvasInner({ data, projectId }: { data: StudioData; projectId: string 
         />
       </ReactFlow>
 
-      {/* 画布工具栏（可拖动 dock） */}
+      {/* 画布工具栏（可拖动 dock，默认吸底居中） */}
       <div
-        className="glass-panel absolute z-20 flex flex-col gap-1.5 rounded-xl border border-[#333b4a] p-1.5 shadow-xl shadow-black/50"
-        style={{ left: dockPos.x, top: dockPos.y }}
+        ref={dockRef}
+        className="glass-panel absolute bottom-3 left-1/2 z-20 flex -translate-x-1/2 flex-col gap-1.5 rounded-xl border border-[#333b4a] p-1.5 shadow-xl shadow-black/50"
+        style={dockPos ? { left: dockPos.x, top: dockPos.y, right: 'auto', bottom: 'auto', transform: 'none' } : undefined}
       >
         <div
           className="flex cursor-grab items-center justify-center pb-0.5 active:cursor-grabbing"
@@ -1349,6 +1381,15 @@ function CanvasInner({ data, projectId }: { data: StudioData; projectId: string 
               <div className="mx-0.5 w-px bg-[#333b4a]" />
             </>
           ) : null}
+          <button
+            type="button"
+            onClick={() => void handleResetSizes()}
+            disabled={locked || items.length === 0}
+            className="rounded-lg px-2.5 py-1 text-[11px] text-pink-300/90 transition-colors hover:bg-pink-500/10 disabled:cursor-not-allowed disabled:opacity-40"
+            title="把所有节点恢复为统一默认尺寸"
+          >
+            📐 恢复尺寸
+          </button>
           <button
             type="button"
             onClick={() => setLocked((v) => !v)}

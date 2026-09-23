@@ -58,7 +58,16 @@ export function AgentPanel({
         title="自动规划 Agent"
         extra={
           <Badge tone={running ? 'blue' : plan ? 'pink' : 'default'}>
-            {running ? '执行中' : plan ? plan.status : '待启动'}
+            {running ? (
+              <span className="inline-flex items-center gap-1.5">
+                <span className="agent-badge-running inline-block size-1.5 rounded-full bg-sky-300" />
+                执行中
+              </span>
+            ) : plan ? (
+              plan.status
+            ) : (
+              '待启动'
+            )}
           </Badge>
         }
       >
@@ -181,21 +190,26 @@ function PlanSteps({
           <div
             key={step.id}
             className={clsx(
-              'rounded-lg border p-2',
+              'rounded-lg border p-2 transition-colors duration-300',
               step.status === 'succeeded'
                 ? 'border-emerald-500/30 bg-emerald-500/5'
                 : step.status === 'failed'
                   ? 'border-red-500/30 bg-red-500/5'
                   : step.status === 'running'
-                    ? 'border-sky-500/30 bg-sky-500/5'
+                    ? 'agent-step-running border-sky-500/40 bg-sky-500/5'
                     : 'border-[#242a36] bg-[#0e1116]',
             )}
           >
             <div className="flex items-center justify-between gap-2">
-              <span className="text-[12px] text-slate-200">
+              <span className="flex items-center gap-1.5 text-[12px] text-slate-200">
+                {step.status === 'running' ? (
+                  <span className="agent-badge-running text-sky-300">⚡</span>
+                ) : null}
                 {step.index + 1}. {step.title}
               </span>
-              <Badge tone={toneByStatus[step.status] ?? 'default'}>{step.status}</Badge>
+              <Badge tone={toneByStatus[step.status] ?? 'default'}>
+                {step.status === 'running' ? '执行中…' : step.status}
+              </Badge>
             </div>
             <div className="mt-0.5 text-[11px] text-slate-500">{step.rationale}</div>
             <div className="mt-1 flex items-center gap-2 text-[10px] text-slate-600">

@@ -4,6 +4,7 @@ import { useState, useCallback } from 'react';
 import clsx from 'clsx';
 import { Badge, Button, Empty, Field, Input, Select } from '@/components/ui';
 import type { MediaFile } from '@sakura/core';
+import { DEFAULT_NODE_SIZE } from '@sakura/core';
 import { createCanvasItemAction } from '@/app/actions/canvas';
 import { exportCanvasAsTimelineAction } from '@/app/actions/export-canvas';
 
@@ -44,8 +45,8 @@ export function MediaLibraryPanel({
           text: mediaItem.prompt || mediaItem.url?.split('/').pop() || '素材',
           x: Math.random() * 200,
           y: Math.random() * 200,
-          width: mediaItem.kind === 'image' ? 300 : mediaItem.kind === 'video' ? 400 : 300,
-          height: mediaItem.kind === 'image' ? 300 : mediaItem.kind === 'video' ? 300 : 60,
+          width: DEFAULT_NODE_SIZE.width,
+          height: DEFAULT_NODE_SIZE.height,
           z: 0,
         });
         if (result.ok && result.data) {

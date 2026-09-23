@@ -69,6 +69,13 @@ export const CANVAS_ITEM_KIND_LABELS: Record<CanvasItemKind, string> = {
 };
 
 /**
+ * 画布节点的统一默认尺寸（16:9，文字/图片/视频/语音 通用）。
+ * 所有「默认创建」的节点（双击、右键新建、拖入媒体、分镜导入）都使用这一份尺寸，
+ * 保证画布视觉整齐；模板预设与用户手动缩放不受影响。
+ */
+export const DEFAULT_NODE_SIZE = { width: 320, height: 180 } as const;
+
+/**
  * 画布节点的「角色」：对齐小云雀资产创作画布
  * - text/image/video/audio 为基础节点
  * - character/scene/prop 为资产节点：富含结构化字段，可被分镜故事板自动调用

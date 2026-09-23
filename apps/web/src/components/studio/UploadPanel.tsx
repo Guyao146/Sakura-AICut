@@ -5,6 +5,7 @@ import clsx from 'clsx';
 import { Button, Badge } from '@/components/ui';
 import { uploadCanvasMediaAction } from '@/app/actions/upload';
 import { createCanvasItemAction } from '@/app/actions/canvas';
+import { DEFAULT_NODE_SIZE } from '@sakura/core';
 import type { MediaFile } from '@sakura/core';
 
 interface UploadPanelProps {
@@ -35,8 +36,8 @@ export function UploadPanel({ projectId, onMediaAdded }: UploadPanelProps) {
               text: file.name,
               x: Math.random() * 200,
               y: Math.random() * 200,
-              width: media.kind === 'image' ? 300 : media.kind === 'video' ? 400 : 300,
-              height: media.kind === 'image' ? 300 : media.kind === 'video' ? 300 : 60,
+              width: DEFAULT_NODE_SIZE.width,
+              height: DEFAULT_NODE_SIZE.height,
               z: 0,
             });
             onMediaAdded?.(media);
