@@ -93,8 +93,9 @@ body {
   text-align: left !important;
   box-shadow: none !important;
 }
-/* 节点尺寸变化（一键恢复默认大小、手动缩放）时平滑过渡，不生硬 */
-.react-flow__node {
+/* 节点尺寸变化默认不过渡：手动拖拽缩放时每帧都在改尺寸，
+   过渡会让缩放手感变「肉」；只在「一键恢复尺寸」时临时启用（见 .canvas-size-animating）。 */
+.canvas-size-animating .react-flow__node {
   transition:
     width 0.28s var(--ease-spring),
     height 0.28s var(--ease-spring);
@@ -165,6 +166,18 @@ body {
 /* 精致回弹缓动（所有出场动画统一使用） */
 :root {
   --ease-spring: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* 无障碍：前庭/动效敏感用户关闭系统动画时，应用内的持续动画与入场动画全部降级到瞬时 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 .animate-pop-in {
@@ -254,6 +267,32 @@ body {
 /* 「执行中」徽标闪烁 */
 .agent-badge-running {
   animation: dot-blink 1.2s ease-in-out infinite;
+}
+
+/* 画布节点生成中（RunningHub「节点即计算」式反馈）：边框流动微光 */
+.node-generating {
+  position: relative;
+}
+.node-generating::after {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(120deg, transparent 20%, rgba(244, 114, 182, 0.9) 50%, transparent 80%);
+  background-size: 250% 100%;
+  animation: node-glow 1.2s linear infinite;
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+@keyframes node-glow {
+  to {
+    background-position: -250% 0;
+  }
 }
 
 /* 通用控件 */

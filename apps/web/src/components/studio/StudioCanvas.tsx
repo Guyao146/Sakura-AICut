@@ -24,7 +24,7 @@ import {
 import { NodeResizer } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import clsx from 'clsx';
-import { Empty, Badge } from '@/components/ui';
+import { Badge } from '@/components/ui';
 import type { StudioData } from './types';
 import {
   createCanvasItemAction,
@@ -100,6 +100,8 @@ interface CanvasItemNodeData {
   };
   /** ② @ 引用候选列表 */
   mentionables?: Mentionable[];
+  /** 该节点正在生成媒体（边框流动微光） */
+  generating?: boolean;
 }
 
 function CanvasItemNode({ data, selected }: { data: CanvasItemNodeData; selected?: boolean }) {
@@ -124,6 +126,7 @@ function CanvasItemNode({ data, selected }: { data: CanvasItemNodeData; selected
     onLinkAsset,
     screenplayEntities,
     mentionables,
+    generating,
   } = data;
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState(item.text);
@@ -328,6 +331,7 @@ function CanvasItemNode({ data, selected }: { data: CanvasItemNodeData; selected
         selected
           ? 'border-pink-400/60 ring-1 ring-pink-400/40'
           : 'border-[#2b3240] hover:border-pink-400/30',
+        generating && 'node-generating',
       )}
       onContextMenu={handleRightClick}
       onDoubleClick={(e) => {
@@ -352,6 +356,9 @@ function CanvasItemNode({ data, selected }: { data: CanvasItemNodeData; selected
           </span>
         ) : null}
         {groupId ? <span className="text-[10px] text-pink-300/80">◈ 已分组</span> : null}
+        {generating ? (
+          <span className="agent-badge-running ml-auto shrink-0 text-[10px] text-sky-300">✦ 生成中</span>
+        ) : null}
       </div>
       {editing ? (
         <>
@@ -443,10 +450,20 @@ const DEFAULT_EDGE_OPTIONS = {
   style: { stroke: '#f472b6', strokeWidth: 2 },
 };
 
+/** 画幅比例选项（对齐小云雀「视频偏好 / 图片偏好」前置到生成入口） */
+const ASPECT_RATIOS: Array<{ label: string; value: string; icon: string; hint?: string }> = [
+  { label: '横屏 16:9', value: '16:9', icon: '🖥️', hint: '电影 / 横屏短片' },
+  { label: '竖屏 9:16', value: '9:16', icon: '📱', hint: '短剧 / 信息流' },
+  { label: '方图 1:1', value: '1:1', icon: '⬜', hint: '封面 / 海报' },
+  { label: '宽幕 21:9', value: '21:9', icon: '🎬', hint: '院线感宽屏' },
+];
+
 function CanvasInner({ data, projectId }: { data: StudioData; projectId: string }) {
   const [items, setItems] = useState<CanvasItem[]>(data.canvasItems);
   const [groups, setGroups] = useState<CanvasGroup[]>(data.canvasGroups);
   const [itemGroups, setItemGroups] = useState<Record<string, string>>(data.itemGroups);
+  // 选中节点提前声明：生成目标等派生值依赖它，且它必须早于 buildNodes 使用
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const { screenToFlowPosition, fitView, setCenter } = useReactFlow();
 
   /* ------------------------- 可拖动工具栏（dock） ------------------------- */
@@ -529,27 +546,79 @@ function CanvasInner({ data, projectId }: { data: StudioData; projectId: string 
       if (!changed && added.length === 0) return prev;
       return added.length > 0 ? [...next, ...added] : next;
     });
+    // 内容已回填的节点不再是「生成中」（url 从空变非空即代表生成完成）
+    setGeneratingIds((prev) => {
+      if (prev.size === 0) return prev;
+      const still = new Set<string>();
+      const localById = new Map(data.canvasItems.map((it) => [it.id, it]));
+      for (const id of prev) {
+        const remote = localById.get(id);
+        // 仍在生成的条件：服务端还没有该节点的媒体产物
+        if (remote && !remote.url) still.add(id);
+      }
+      return still.size === prev.size ? prev : still;
+    });
   }, [data.canvasItems]);
 
   /* ------------------------------ 画布内 AI 生成 ------------------------------ */
 
-  // 生成中标记，用于禁用按钮 & 节点显示"生成中"
-  const [generating, setGenerating] = useState(false);
+  // 正在生成的节点 id 集合：节点级「生成中」反馈（对齐 RunningHub「节点即计算」）
+  const [generatingIds, setGeneratingIds] = useState<Set<string>>(new Set());
+  const generating = generatingIds.size > 0;
 
   const handleGenerateImages = useCallback(
-    async (itemIds: string[]) => {
+    async (itemIds: string[], aspectRatio?: string) => {
       if (itemIds.length === 0) return;
-      setGenerating(true);
+      setGeneratingIds((prev) => {
+        const next = new Set(prev);
+        for (const id of itemIds) next.add(id);
+        return next;
+      });
       try {
-        const result = await generateCanvasItemsAction(projectId, itemIds);
+        const result = await generateCanvasItemsAction(projectId, itemIds, aspectRatio ? { aspectRatio } : {});
         if (!result.ok) {
           alert(result.error ?? '提交生成失败');
+          setGeneratingIds((prev) => {
+            const next = new Set(prev);
+            for (const id of itemIds) next.delete(id);
+            return next;
+          });
         }
-      } finally {
-        setGenerating(false);
+      } catch {
+        setGeneratingIds((prev) => {
+          const next = new Set(prev);
+          for (const id of itemIds) next.delete(id);
+          return next;
+        });
       }
     },
     [projectId],
+  );
+
+  // 生成目标：有选中用选中，否则取全部有内容的文字节点
+  const generateTargets = useMemo(
+    () =>
+      selectedIds.length > 0
+        ? selectedIds
+        : items.filter((it) => it.kind === 'text' && it.text.trim()).map((it) => it.id),
+    [selectedIds, items],
+  );
+
+  // 画幅比例选择（对齐小云雀「模型选择 / 视频偏好」前置到生成入口）
+  const showAspectRatioMenu = useCallback(
+    (e: React.MouseEvent<HTMLButtonElement>) => {
+      const targets = generateTargets;
+      openContextMenu(
+        ASPECT_RATIOS.map((ratio) => ({
+          label: `${ratio.label}${ratio.hint ? ` · ${ratio.hint}` : ''}`,
+          icon: ratio.icon,
+          action: () => void handleGenerateImages(targets, ratio.value),
+        })),
+        e.clientX,
+        e.clientY,
+      );
+    },
+    [generateTargets, handleGenerateImages],
   );
 
   // 画布图片 → 镜头首/尾帧（多参创作联动）
@@ -599,6 +668,8 @@ function CanvasInner({ data, projectId }: { data: StudioData; projectId: string 
             if (result.ok && result.data) setItems((prev) => prev.map((it) => (it.id === item.id ? result.data! : it)).sort((a, b) => a.z - b.z));
           },
           onGenerate: (ids: string[]) => void handleGenerateImages(ids),
+          // 节点级「生成中」反馈：边框流动微光
+          generating: generatingIds.has(item.id),
           onSendToShot: (mediaId: string, shotId: string, which: 'first' | 'last') =>
             void handleSendToShot(mediaId, shotId, which),
           shots: data.shots.map((shot) => ({ id: shot.id, index: shot.index, description: shot.description })),
@@ -690,7 +761,6 @@ function CanvasInner({ data, projectId }: { data: StudioData; projectId: string 
   // 关键：nodes 由 ReactFlow 自管状态，拖动时实时更新位置，不会被 items 旧值覆盖
   const [rfNodes, setRfNodes, onRfNodesChange] = useNodesState(buildNodes());
   const [rfEdges, setRfEdges, onRfEdgesChange] = useEdgesState<Edge>([]);
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
   // React Flow 的 selection effect 依赖回调引用，内联回调会与 setState 形成更新循环。
   const handleSelectionChange = useCallback(({ nodes }: OnSelectionChangeParams) => {
@@ -852,14 +922,19 @@ function CanvasInner({ data, projectId }: { data: StudioData; projectId: string 
   );
 
   // 一键恢复所有节点为统一默认尺寸
+  const [animateSizes, setAnimateSizes] = useState(false);
   const handleResetSizes = useCallback(async () => {
     const snapshot = items.map((it) => ({ ...it }));
+    // 临时启用尺寸过渡（手动缩放时关闭，避免拖拽手感变肉）
+    setAnimateSizes(true);
     // 乐观更新：本地立刻拉平，节点身份保持不变
     setItems((prev) => prev.map((it) => ({ ...it, width: DEFAULT_NODE_SIZE.width, height: DEFAULT_NODE_SIZE.height })));
     setRfNodes((prev) =>
       prev.map((node) => ({ ...node, width: DEFAULT_NODE_SIZE.width, height: DEFAULT_NODE_SIZE.height })),
     );
     const result = await resetCanvasItemSizesAction(projectId);
+    // 动画时长（0.28s）后再关闭，保证过渡跑完
+    setTimeout(() => setAnimateSizes(false), 320);
     if (!result.ok) {
       setItems(snapshot);
       setRfNodes((prev) =>
@@ -1227,7 +1302,7 @@ function CanvasInner({ data, projectId }: { data: StudioData; projectId: string 
   return (
     <div
       ref={paneRef}
-      className="relative size-full bg-[#0e1116]"
+      className={clsx('relative size-full bg-[#0e1116]', animateSizes && 'canvas-size-animating')}
       onDoubleClick={handlePaneDoubleClick}
       onContextMenu={handlePaneRightClick}
       onDragOver={handleDragOver}
@@ -1303,19 +1378,29 @@ function CanvasInner({ data, projectId }: { data: StudioData; projectId: string 
           >
             🎬 成组{selectedIds.length > 1 ? ` (${selectedIds.length})` : ''}
           </button>
+          {/* 生成图片：主按钮直接生成，右侧按钮选比例（对齐小云雀「模型选择」前置） */}
           <button
             type="button"
-            onClick={() =>
-              void handleGenerateImages(
-                selectedIds.length > 0 ? selectedIds : items.filter((it) => it.kind === 'text' && it.text.trim()).map((it) => it.id),
-              )
-            }
-            disabled={locked || generating}
+            onClick={() => void handleGenerateImages(generateTargets)}
+            disabled={locked || generating || generateTargets.length === 0}
             className="rounded-lg px-2.5 py-1 text-[11px] text-amber-300 transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
             title={selectedIds.length > 0 ? '为选中的节点生成图片（文字 → 图片）' : '把画布上的文字节点批量生成图片'}
           >
-            {generating ? '⏳ 生成中…' : '✨ 生成图片'}
-            {selectedIds.length > 0 ? ` (${selectedIds.length})` : ''}
+            {generating ? `⏳ 生成中 (${generatingIds.size})…` : '✨ 生成图片'}
+            {generateTargets.length > 0 ? ` (${generateTargets.length})` : ''}
+          </button>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              showAspectRatioMenu(e);
+            }}
+            disabled={locked || generating || generateTargets.length === 0}
+            className="rounded-lg px-1.5 py-1 text-[11px] text-amber-300/80 transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
+            title="选择画幅比例后生成"
+          >
+            ▾
           </button>
           <button
             type="button"
@@ -1444,7 +1529,34 @@ function CanvasInner({ data, projectId }: { data: StudioData; projectId: string 
         onChange={(e) => void handleImportFile(e)}
       />
 
-      {items.length === 0 && (<div className="absolute inset-0 flex items-center justify-center pointer-events-none"><Empty text="无限画布为空。双击或右键添加素材。" /></div>)}
+      {items.length === 0 && (
+        // 空画布引导（对齐 RunningHub「快捷创作」模板专区）：不只是提示，直接给可点入口
+        <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
+          <div className="pointer-events-auto w-[420px] max-w-[88vw] animate-pop-in rounded-2xl border border-[#242a36] bg-[#12151c]/90 p-5 text-center shadow-2xl backdrop-blur">
+            <div className="mb-1 text-2xl">🌸</div>
+            <h3 className="text-sm font-medium text-slate-100">无限画布为空</h3>
+            <p className="mt-1 text-[11px] leading-relaxed text-slate-500">
+              双击空白创建文字 · 右键选类型 · 从右侧「素材」拖入媒体
+              <br />
+              或先套一个结构模板，再逐节点替换内容。
+            </p>
+            <div className="mt-3 flex flex-wrap justify-center gap-1.5">
+              {CANVAS_TEMPLATES.map((template) => (
+                <button
+                  key={template.id}
+                  type="button"
+                  onClick={() => void handleApplyTemplate(template.id)}
+                  disabled={locked}
+                  title={template.description}
+                  className="rounded-full border border-pink-400/30 bg-pink-500/5 px-3 py-1 text-[11px] text-pink-200 transition-all hover:border-pink-400/60 hover:bg-pink-500/10 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  📐 {template.name}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
