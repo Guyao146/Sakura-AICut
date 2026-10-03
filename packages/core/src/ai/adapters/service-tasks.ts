@@ -23,10 +23,10 @@ import {
 } from '../utils';
 
 /**
- * 阿里云百炼 DashScope 适配器
- * - 文本：POST /compatible-mode/v1/chat/completions（OpenAI 兼容模式）
- * - 图片：POST /api/v1/services/aigc/text2image/image-synthesis（异步，Header X-DashScope-Async: enable）
- * - 视频：POST /api/v1/services/aigc/video-generation/video-synthesis（异步，万相 wanx / wan2.x）
+ * 服务任务接口适配器
+ * - 文本：POST /compatible-mode/v1/chat/completions（通用兼容模式）
+ * - 图片：POST /api/v1/services/aigc/text2image/image-synthesis（通过请求头启用异步模式）
+ * - 视频：POST /api/v1/services/aigc/video-generation/video-synthesis（异步任务）
  * - 查询：GET  /api/v1/tasks/{task_id}
  */
 function dshUrl(ctx: AdapterContext, path: string): string {
@@ -66,8 +66,8 @@ function parseDshTask(payload: DshTaskResp, kind: 'image' | 'video'): AsyncTaskS
   };
 }
 
-/** 轮询百炼异步任务直到结束 */
-async function waitDashscopeTask(ctx: AdapterContext, taskId: string, kind: 'image' | 'video'): Promise<AsyncTaskState> {
+/** 轮询异步任务直到结束 */
+async function waitServiceTask(ctx: AdapterContext, taskId: string, kind: 'image' | 'video'): Promise<AsyncTaskState> {
   const deadline = Date.now() + 5 * 60 * 1000;
   for (;;) {
     const payload = await fetchJson<DshTaskResp>(
@@ -77,14 +77,14 @@ async function waitDashscopeTask(ctx: AdapterContext, taskId: string, kind: 'ima
     );
     const state = parseDshTask(payload, kind);
     if (state.status === 'succeeded' || state.status === 'failed' || state.status === 'canceled') return state;
-    if (Date.now() > deadline) throw new Error('百炼异步任务轮询超时');
+    if (Date.now() > deadline) throw new Error('服务任务接口异步任务轮询超时');
     await new Promise((resolve) => setTimeout(resolve, 3000));
   }
 }
 
-export const dashscopeAdapter: ProviderAdapter = {
+export const serviceTasksAdapter: ProviderAdapter = {
   protocol: 'dashscope',
-  label: '阿里云百炼 DashScope',
+  label: '服务任务接口',
 
   async chat(ctx: AdapterContext, req: TextGenerateRequest): Promise<TextGenerateResult> {
     const payload = await fetchJson<{
@@ -140,8 +140,8 @@ export const dashscopeAdapter: ProviderAdapter = {
     const taskId = String((payload.output?.task_id as string) ?? '');
     if (taskId) {
       // 图片接口同样是异步的，这里阻塞等待结果
-      const finalState = await waitDashscopeTask(ctx, taskId, 'image');
-      if (finalState.status === 'failed') throw new Error(`百炼图片生成失败：${finalState.error ?? '未知错误'}`);
+      const finalState = await waitServiceTask(ctx, taskId, 'image');
+      if (finalState.status === 'failed') throw new Error(`服务任务接口图片生成失败：${finalState.error ?? '未知错误'}`);
       const results = (finalState.raw as DshTaskResp | undefined)?.output?.results as
         | Array<Record<string, unknown>>
         | undefined;
@@ -174,7 +174,7 @@ export const dashscopeAdapter: ProviderAdapter = {
       contextOptions(ctx),
     );
     const taskId = String((payload.output?.task_id as string) ?? '');
-    if (!taskId) throw new Error(`百炼视频任务提交失败：${JSON.stringify(payload).slice(0, 300)}`);
+    if (!taskId) throw new Error(`服务任务接口视频任务提交失败：${JSON.stringify(payload).slice(0, 300)}`);
     return { taskId, raw: payload };
   },
 

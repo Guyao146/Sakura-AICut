@@ -11,12 +11,12 @@ import type {
 import { contextOptions, normalizeBaseUrl } from '../utils';
 
 /**
- * Anthropic Claude 适配器（Messages API）
+ * 消息接口适配器（Messages API）
  * - POST /v1/messages
- * - Header: x-api-key + anthropic-version
+ * - Header: x-api-key + 版本请求头
  * - 图片理解：content 数组中带 base64 图片块
  */
-function anthropicHeaders(ctx: AdapterContext): Record<string, string> {
+function messagesHeaders(ctx: AdapterContext): Record<string, string> {
   return {
     'Content-Type': 'application/json',
     'anthropic-version': '2023-06-01',
@@ -25,29 +25,29 @@ function anthropicHeaders(ctx: AdapterContext): Record<string, string> {
   };
 }
 
-interface AnthropicContentBlock {
+interface MessageContentBlock {
   type: string;
   text?: string;
   source?: { type: 'base64'; media_type: string; data: string };
 }
 
-interface AnthropicResponse {
-  content?: AnthropicContentBlock[];
+interface MessagesResponse {
+  content?: MessageContentBlock[];
   usage?: { input_tokens?: number; output_tokens?: number };
   model?: string;
   type?: string;
   error?: { message?: string };
 }
 
-function dataUriToBlock(uri: string): AnthropicContentBlock | null {
+function dataUriToBlock(uri: string): MessageContentBlock | null {
   const match = uri.match(/^data:(image\/[a-zA-Z+]+);base64,(.+)$/);
   if (!match) return null;
   return { type: 'image', source: { type: 'base64', media_type: match[1] ?? 'image/png', data: match[2] ?? '' } };
 }
 
-export const anthropicAdapter: ProviderAdapter = {
+export const messagesAdapter: ProviderAdapter = {
   protocol: 'anthropic',
-  label: 'Anthropic Claude',
+  label: '消息接口',
 
   async chat(ctx: AdapterContext, req: TextGenerateRequest): Promise<TextGenerateResult> {
     const systemMessages = req.messages.filter((m) => m.role === 'system').map((m) => m.content);
@@ -56,16 +56,16 @@ export const anthropicAdapter: ProviderAdapter = {
       .map((m) => ({
         role: m.role === 'assistant' ? 'assistant' : 'user',
         content: [
-          ...(m.images ?? []).map(dataUriToBlock).filter((b): b is AnthropicContentBlock => b !== null),
+          ...(m.images ?? []).map(dataUriToBlock).filter((b): b is MessageContentBlock => b !== null),
           { type: 'text', text: m.content },
         ],
       }));
 
-    const payload = await fetchJson<AnthropicResponse>(
+    const payload = await fetchJson<MessagesResponse>(
       `${normalizeBaseUrl(ctx.baseUrl)}/v1/messages`,
       {
         method: 'POST',
-        headers: anthropicHeaders(ctx),
+        headers: messagesHeaders(ctx),
         body: JSON.stringify({
           model: req.model,
           max_tokens: req.maxTokens ?? 4096,
@@ -78,7 +78,7 @@ export const anthropicAdapter: ProviderAdapter = {
       },
       contextOptions(ctx),
     );
-    if (payload?.error) throw new Error(`Claude 请求失败：${payload.error.message}`);
+    if (payload?.error) throw new Error(`消息接口 请求失败：${payload.error.message}`);
 
     const text = (payload?.content ?? [])
       .filter((block) => block.type === 'text')
@@ -96,17 +96,17 @@ export const anthropicAdapter: ProviderAdapter = {
   },
 
   async image(_ctx: AdapterContext, _req: ImageGenerateRequest): Promise<ImageGenerateResult> {
-    throw new Error('Claude 暂不提供图片生成，请在「模型路由」中把图片能力指向其它供应商');
+    throw new Error('消息接口 暂不提供图片生成，请在「模型路由」中把图片能力指向其它供应商');
   },
 
   async probe(ctx: AdapterContext): Promise<ProbeResult> {
     const started = Date.now();
     try {
-      const payload = await fetchJson<AnthropicResponse>(
+      const payload = await fetchJson<MessagesResponse>(
         `${normalizeBaseUrl(ctx.baseUrl)}/v1/messages`,
         {
           method: 'POST',
-          headers: anthropicHeaders(ctx),
+          headers: messagesHeaders(ctx),
           body: JSON.stringify({
             model: 'claude-3-5-haiku-latest',
             max_tokens: 1,

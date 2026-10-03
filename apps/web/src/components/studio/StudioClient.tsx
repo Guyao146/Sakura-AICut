@@ -1,12 +1,13 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import clsx from 'clsx';
-import type { Job } from '@sakura/core';
+import { APP_VERSION, hasJobFailures, isActiveJob } from '@sakura/core';
 import { Badge, Button, Progress } from '@/components/ui';
-import { APP_VERSION } from '@sakura/core';
+import { TaskCenter } from './TaskCenter';
+import { useStudioJobs } from './use-studio-jobs';
 import { StepBriefPanel, StepScriptPanel } from './StudioPanels';
 import { StepAssetsPanel } from './ProductionPanels';
 import { StepShotsPanel } from './ShotPanels';
@@ -15,7 +16,7 @@ import { AgentPanel } from './AgentPanel';
 import { StudioCanvasBoard } from './StudioCanvas';
 import { MediaLibraryPanel } from './MediaLibraryPanel';
 import { UploadPanel } from './UploadPanel';
-import { RedrawPanel, ReplicatePanel, ScriptVersionPanel, SmartPreviewPanel } from './FeaturePanels';
+import { RedrawPanel, QaPanel, ReplicatePanel, ScriptVersionPanel, SmartPreviewPanel } from './FeaturePanels';
 import type { StudioData } from './types';
 
 /**
@@ -27,54 +28,33 @@ const STEP_ORDER = ['brief', 'script', 'assets', 'shots', 'edit'];
 export default function StudioClient({ data }: { data: StudioData }) {
   const router = useRouter();
   const [stage, setStage] = useState<string>(STEP_ORDER.includes(data.project.stage) ? data.project.stage : 'brief');
-  const [tab, setTab] = useState<'step' | 'agent' | 'canvas'>('step');
+  const [tab, setTab] = useState<'step' | 'agent' | 'canvas' | 'tasks'>('step');
   const [agentMode, setAgentMode] = useState<'plan' | 'action'>('plan');
   const [busy, setBusy] = useState(false);
   const [panelCollapsed, setPanelCollapsed] = useState(false);
   const [message, setMessage] = useState<{ tone: 'ok' | 'err'; text: string } | null>(null);
-  const [jobs, setJobs] = useState<Job[]>([]);
-  const lastActiveCount = useRef(0);
-
-  const loadJobs = useCallback(async () => {
-    try {
-      const res = await fetch(`/api/jobs?projectId=${data.project.id}&limit=20`, { cache: 'no-store' });
-      const payload = (await res.json()) as { ok: boolean; data?: Job[] };
-      const list = payload.data ?? [];
-      setJobs(list);
-      const active = list.filter((job) => job.status === 'running' || job.status === 'pending').length;
-      // 任务从运行态归零时刷新服务端数据，把产物显示出来
-      if (lastActiveCount.current > 0 && active < lastActiveCount.current) router.refresh();
-      lastActiveCount.current = active;
-    } catch {
-      /* 忽略轮询错误 */
-    }
-  }, [data.project.id, router]);
-
-  useEffect(() => {
-    void loadJobs();
-    const timer = setInterval(() => void loadJobs(), 3000);
-    return () => clearInterval(timer);
-  }, [loadJobs]);
+  const { jobs, error: jobsError, reload: loadJobs, acceptJob } = useStudioJobs(data.project.id, data.jobs);
 
   const run = useCallback(
     async (label: string, fn: () => Promise<{ ok: boolean; error?: string }>) => {
       setBusy(true);
       setMessage(null);
-      const result = await fn();
-      if (result.ok) {
+      try {
+        const result = await fn();
+        if (!result.ok) throw new Error(result.error ?? `${label}失败`);
         setMessage({ tone: 'ok', text: `${label}已提交` });
         router.refresh();
         void loadJobs();
-      } else {
-        setMessage({ tone: 'err', text: result.error ?? `${label}失败` });
-      }
-      setBusy(false);
+      } catch (error) {
+        setMessage({ tone: 'err', text: error instanceof Error ? error.message : `${label}失败` });
+      } finally { setBusy(false); }
     },
     [router, loadJobs],
   );
 
-  const activeJobs = jobs.filter((job) => job.status === 'running' || job.status === 'pending');
-  const recentFailed = jobs.filter((job) => job.status === 'failed').slice(0, 2);
+  const activeJobs = jobs.filter(isActiveJob);
+  const failedCount = jobs.filter(hasJobFailures).length;
+  const openPanel = (next: typeof tab) => { setTab(next); setPanelCollapsed(false); };
 
   // 只有资产生成 / 分镜片段两步需要无限画布；其余步骤显示独立页面
   const showCanvas = stage === 'assets' || stage === 'shots';
@@ -145,50 +125,38 @@ export default function StudioClient({ data }: { data: StudioData }) {
           <Button
             size="sm"
             variant={tab === 'agent' ? 'primary' : 'default'}
-            onClick={() => setTab(tab === 'agent' ? 'step' : 'agent')}
+            onClick={() => openPanel(tab === 'agent' && !panelCollapsed ? 'step' : 'agent')}
           >
             🤖 Agent
           </Button>
           <Button
             size="sm"
             variant={tab === 'canvas' ? 'primary' : 'default'}
-            onClick={() => setTab(tab === 'canvas' ? 'step' : 'canvas')}
+            onClick={() => openPanel(tab === 'canvas' && !panelCollapsed ? 'step' : 'canvas')}
           >
             📚 素材
           </Button>
-          <Button size="sm" variant="ghost" onClick={() => router.refresh()}>
+          <Button size="sm" variant={tab === 'tasks' ? 'primary' : 'default'} onClick={() => openPanel('tasks')}>
+            任务{activeJobs.length ? ` (${activeJobs.length})` : failedCount ? ` · ${failedCount} 需关注` : ''}
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => { router.refresh(); void loadJobs(); }}>
             刷新
           </Button>
         </div>
       </header>
 
-      {(activeJobs.length > 0 || message || recentFailed.length > 0) && (
+      {(activeJobs.length > 0 || message || jobsError) && (
         <div className="space-y-1 border-b border-[#1c2129] bg-[#0e1116] px-5 py-2">
-          {activeJobs.map((job) => (
-            <div key={job.id} className="flex animate-fade-in items-center gap-3">
-              <Badge tone="blue">
-                <span className="inline-flex items-center gap-1.5">
-                  <span className="agent-badge-running inline-block size-1.5 rounded-full bg-sky-300" />
-                  {job.type}
-                </span>
-              </Badge>
-              <div className="flex-1">
-                <Progress value={job.progress} />
-              </div>
-              <span className="w-[200px] truncate text-[11px] text-slate-400">{job.stageLabel ?? '执行中'}</span>
-              <span className="text-[11px] text-slate-500">{Math.round(job.progress)}%</span>
-            </div>
-          ))}
-          {message ? (
-            <div className={clsx('text-[11px]', message.tone === 'ok' ? 'text-emerald-300' : 'text-red-300')}>
-              {message.text}
-            </div>
+          {activeJobs.length > 0 ? (
+            <button type="button" onClick={() => openPanel('tasks')} className="flex w-full items-center gap-3 text-left" aria-label="查看进行中的任务">
+              <Badge tone="blue">{activeJobs.length} 个任务进行中</Badge>
+              <span className="min-w-0 flex-1"><Progress value={activeJobs[0].progress} /></span>
+              <span className="max-w-[240px] truncate text-[11px] text-slate-400">{activeJobs[0].stageLabel || '排队中'}</span>
+              <span className="shrink-0 text-[11px] text-pink-300">任务中心 →</span>
+            </button>
           ) : null}
-          {recentFailed.map((job) => (
-            <div key={job.id} className="text-[11px] text-red-300">
-              {job.type} 失败：{job.error?.slice(0, 160)}
-            </div>
-          ))}
+          {message ? <p role="status" className={clsx('text-[11px]', message.tone === 'ok' ? 'text-emerald-300' : 'text-red-300')}>{message.text}</p> : null}
+          {jobsError ? <p role="status" className="text-[11px] text-amber-300">{jobsError}，保留上次任务状态。</p> : null}
         </div>
       )}
 
@@ -196,7 +164,7 @@ export default function StudioClient({ data }: { data: StudioData }) {
         {showCanvas ? (
           <div className="flex min-w-0 flex-1 flex-col">
             <div className="min-h-0 flex-1">
-              <StudioCanvasBoard data={data} />
+              <StudioCanvasBoard data={{ ...data, jobs }} onJobAccepted={acceptJob} onOpenTasks={() => openPanel('tasks')} />
             </div>
           </div>
         ) : (
@@ -216,6 +184,10 @@ export default function StudioClient({ data }: { data: StudioData }) {
               ) : (
                 <div className="space-y-4">
                   <StepEditPanel data={data} busy={busy} run={run} />
+                  <QaPanel
+                    projectId={data.project.id}
+                    running={activeJobs.some((job) => job.type === 'qa.review')}
+                  />
                   <ReplicatePanel projectId={data.project.id} />
                   <RedrawPanel projectId={data.project.id} />
                 </div>
@@ -273,7 +245,9 @@ export default function StudioClient({ data }: { data: StudioData }) {
               </button>
             </div>
             <div key={tab + stage} className="animate-fade-in">
-              {tab === 'canvas' ? (
+              {tab === 'tasks' ? (
+                <TaskCenter projectId={data.project.id} jobs={jobs} syncError={jobsError} onRefresh={loadJobs} onAccepted={acceptJob} />
+              ) : tab === 'canvas' ? (
                 <div className="space-y-4">
                   <div>
                     <h3 className="text-xs font-medium text-slate-300 mb-2">上传素材</h3>
@@ -314,6 +288,10 @@ export default function StudioClient({ data }: { data: StudioData }) {
               ) : (
                 <div className="space-y-4">
                   <StepEditPanel data={data} busy={busy} run={run} />
+                  <QaPanel
+                    projectId={data.project.id}
+                    running={activeJobs.some((job) => job.type === 'qa.review')}
+                  />
                   <ReplicatePanel projectId={data.project.id} />
                   <RedrawPanel projectId={data.project.id} />
                 </div>

@@ -12,7 +12,7 @@ export const BUILTIN_PROMPT_TEMPLATES: BuiltinPrompt[] = [
     key: 'short-drama-hook',
     category: 'screenplay',
     name: '短剧黄金三秒开头',
-    description: '生成抓人的开场钩子，适配抖音/快手短剧节奏。',
+    description: '生成抓人的开场钩子，适配短视频平台的短剧节奏。',
     capability: 'text',
     tags: ['短剧', '钩子', '开场'],
     variables: [

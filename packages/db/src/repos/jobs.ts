@@ -101,6 +101,17 @@ export function getJob(id: string): Job | null {
   return row ? mapJob(row) : null;
 }
 
+/** 批量按 id 取任务，避免 N+1 查询（任务轮询接口每 3 秒会被前端调用一次） */
+export function getJobsByIds(ids: string[]): Job[] {
+  const unique = [...new Set(ids.filter((id) => id.length > 0))];
+  if (unique.length === 0) return [];
+  const placeholders = unique.map(() => '?').join(',');
+  const rows = getDb()
+    .prepare(`SELECT * FROM jobs WHERE id IN (${placeholders})`)
+    .all(...(unique as never[])) as unknown as JobRow[];
+  return rows.map(mapJob);
+}
+
 export function listJobs(
   filter: { projectId?: string; status?: TaskStatus[]; targetType?: string; targetId?: string; limit?: number } = {},
 ): Job[] {
@@ -187,7 +198,7 @@ export function addJobEvent(
 
 export function listJobEvents(jobId: string, limit = 50): JobEvent[] {
   const rows = getDb()
-    .prepare('SELECT * FROM job_events WHERE job_id = ? ORDER BY created_at ASC LIMIT ?')
+    .prepare('SELECT * FROM job_events WHERE job_id = ? ORDER BY created_at DESC, rowid DESC LIMIT ?')
     .all(jobId, limit) as unknown as Array<{
     id: string;
     job_id: string;
@@ -197,7 +208,7 @@ export function listJobEvents(jobId: string, limit = 50): JobEvent[] {
     created_at: string;
     updated_at: string;
   }>;
-  return rows.map((row) => ({
+  return rows.reverse().map((row) => ({
     id: row.id,
     jobId: row.job_id,
     level: row.level as JobEvent['level'],
@@ -206,6 +217,54 @@ export function listJobEvents(jobId: string, limit = 50): JobEvent[] {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }));
+}
+
+interface JobEventRow {
+  id: string;
+  job_id: string;
+  level: string;
+  message: string;
+  data_json: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+function mapJobEvent(row: JobEventRow): JobEvent {
+  return {
+    id: row.id,
+    jobId: row.job_id,
+    level: row.level as JobEvent['level'],
+    message: row.message,
+    data: parseJson<Record<string, unknown> | null>(row.data_json, null),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+/**
+ * 批量取多个任务各自最近 N 条事件，一次查询搞定。
+ * 任务轮询接口每 3 秒被每个客户端调用一次，逐任务查询会是 N+1 的性能热点。
+ * SQLite 3.25+ 支持窗口函数，用 ROW_NUMBER() 取每个任务分组的尾部记录。
+ */
+export function listJobEventsForJobs(jobIds: string[], limitPerJob = 12): Record<string, JobEvent[]> {
+  const unique = [...new Set(jobIds.filter((id) => id.length > 0))];
+  if (unique.length === 0) return {};
+  const placeholders = unique.map(() => '?').join(',');
+  const rows = getDb()
+    .prepare(
+      `SELECT id, job_id, level, message, data_json, created_at, updated_at,
+        ROW_NUMBER() OVER (PARTITION BY job_id ORDER BY created_at DESC, rowid DESC) AS row_num
+       FROM job_events WHERE job_id IN (${placeholders})`,
+    )
+    .all(...(unique as never[])) as unknown as Array<JobEventRow & { row_num: number }>;
+
+  const result: Record<string, JobEvent[]> = {};
+  for (const row of rows) {
+    if (row.row_num > limitPerJob) continue;
+    (result[row.job_id] ??= []).push(mapJobEvent(row));
+  }
+  for (const jobId of Object.keys(result)) result[jobId].reverse();
+  return result;
 }
 
 /* ------------------------- 队列操作 ------------------------- */
@@ -261,7 +320,7 @@ export function completeJob(id: string, result: Record<string, unknown> = {}): J
   getDb()
     .prepare(
       `UPDATE jobs SET status = 'succeeded', progress = 100, result_json = ?, error = NULL, finished_at = ?,
-        updated_at = ? WHERE id = ?`,
+        updated_at = ? WHERE id = ? AND status IN ('pending','queued','running')`,
     )
     .run(toJson(result), now, now, id);
   return getJob(id);
@@ -270,18 +329,20 @@ export function completeJob(id: string, result: Record<string, unknown> = {}): J
 /** 失败处理：未达最大重试次数时回到队列，并做退避 */
 export function failJob(id: string, error: string, retryDelayMs = 12_000): Job | null {
   const job = getJob(id);
-  if (!job) return null;
+  if (!job || job.status === 'canceled' || job.status === 'succeeded' || job.status === 'failed') return job;
   const now = nowIso();
   const canRetry = job.attempts < job.maxAttempts;
   if (canRetry) {
     getDb()
       .prepare(
-        `UPDATE jobs SET status = 'pending', error = ?, scheduled_at = ?, finished_at = NULL, updated_at = ? WHERE id = ?`,
+        `UPDATE jobs SET status = 'pending', error = ?, scheduled_at = ?, finished_at = NULL, updated_at = ?
+         WHERE id = ? AND status IN ('pending','queued','running')`,
       )
       .run(error, new Date(Date.now() + retryDelayMs).toISOString(), now, id);
   } else {
     getDb()
-      .prepare(`UPDATE jobs SET status = 'failed', error = ?, finished_at = ?, updated_at = ? WHERE id = ?`)
+      .prepare(`UPDATE jobs SET status = 'failed', error = ?, finished_at = ?, updated_at = ?
+        WHERE id = ? AND status IN ('pending','queued','running')`)
       .run(error, now, now, id);
   }
   return getJob(id);
@@ -292,6 +353,23 @@ export function cancelJob(id: string): Job | null {
   getDb()
     .prepare(`UPDATE jobs SET status = 'canceled', finished_at = ?, updated_at = ? WHERE id = ? AND status IN ('pending','running','queued')`)
     .run(now, now, id);
+  return getJob(id);
+}
+
+/**
+ * 被进程关闭/崩溃打断的运行中任务：回到队列，重试次数不计入失败次数。
+ * 重启后会被重新领取，已持久化的逐节点结果会跳过，因此不会重复生成。
+ */
+export function requeueInterrupted(id: string): Job | null {
+  const job = getJob(id);
+  if (!job || job.status !== 'running') return job;
+  getDb()
+    .prepare(
+      `UPDATE jobs SET status = 'pending', progress = 0, attempts = MAX(0, attempts - 1),
+        started_at = NULL, finished_at = NULL, heartbeat_at = NULL, updated_at = ?
+       WHERE id = ? AND status = 'running'`,
+    )
+    .run(nowIso(), id);
   return getJob(id);
 }
 

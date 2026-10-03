@@ -8,9 +8,11 @@ import {
   failJob,
   getJob,
   heartbeatJob,
+  requeueInterrupted,
   requeueStalledJobs,
   updateJob,
 } from '@sakura/db';
+import { redactUrl } from '@sakura/core/server';
 import { HANDLERS } from './handlers';
 
 /**
@@ -28,7 +30,12 @@ let shuttingDown = false;
 
 function log(message: string): void {
   const time = new Date().toLocaleTimeString('zh-CN', { hour12: false });
-  console.log(`[worker ${time}] ${message}`);
+  console.log(`[worker ${time}] ${redactMessage(message)}`);
+}
+
+/** 供应商错误消息里可能带 API Key（如 ?key=xxx），落库/打日志前用它脱敏 */
+function redactMessage(message: string): string {
+  return redactUrl(message);
 }
 
 async function runJob(jobId: string): Promise<void> {
@@ -55,7 +62,7 @@ async function runJob(jobId: string): Promise<void> {
     const result = await handler({ job, progress, log: logEvent, isCanceled });
     const latest = getJob(jobId);
     if (latest?.status === 'canceled') {
-      addJobEvent(jobId, 'warn', '任务已被取消，结果未写入');
+      addJobEvent(jobId, 'warn', '后续任务已取消；已经发出的模型请求可能仍然完成并产生费用');
     } else {
       completeJob(jobId, result);
       addJobEvent(jobId, 'info', '任务执行完成');
@@ -63,8 +70,8 @@ async function runJob(jobId: string): Promise<void> {
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    const failed = failJob(jobId, message);
-    addJobEvent(jobId, 'error', message);
+  const failed = getJob(jobId)?.status === 'canceled' ? null : failJob(jobId, message);
+    addJobEvent(jobId, 'error', redactMessage(message));
     log(`任务失败 ${job.type} ${jobId}：${message}`);
     if (failed && failed.status === 'pending') {
       log(`已自动重排队（第 ${failed.attempts}/${failed.maxAttempts} 次尝试）`);
@@ -106,9 +113,13 @@ async function main(): Promise<void> {
     clearInterval(timer);
     clearInterval(stallTimer);
     log(`收到 ${signal}，等待 ${running.size} 个进行中的任务结束…`);
+    for (const jobId of running.keys()) {
+      requeueInterrupted(jobId);
+      addJobEvent(jobId, 'warn', '进程关闭中断执行，任务已重新排队，重启后自动恢复');
+    }
     for (const controller of running.values()) controller.abort();
     const waitTimer = setInterval(() => {
-      if (running.size === 0 || shuttingDown) {
+      if (running.size === 0 || !shuttingDown) {
         clearInterval(waitTimer);
         closeDb();
         log('Worker 已安全退出');

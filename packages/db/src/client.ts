@@ -2,6 +2,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { existsSync, mkdirSync } from 'node:fs';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { SCHEMA_SQL } from './schema.generated';
+import { initEncryptionSecret } from './secret';
 
 /**
  * SQLite 连接与迁移
@@ -69,6 +70,8 @@ function ensureColumn(db: DatabaseSync, table: string, column: string, definitio
 /** 获取数据库连接（单例） */
 export function getDb(): DatabaseSync {
   if (instance) return instance;
+  // 必须先初始化加密密钥，否则 applyMigrations 之后读取/写入供应商凭证会用错密钥
+  initEncryptionSecret();
   const dir = ensureDir(dataDir());
   const file = process.env.SAKURA_DB_FILE?.trim() || join(dir, 'sakura.db');
   ensureDir(dirname(file));

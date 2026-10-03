@@ -109,9 +109,14 @@ export async function queryVideoTask(providerId: string, taskId: string): Promis
   const providers = listProviders();
   const provider = providers.find((item) => item.id === providerId);
   if (!provider) throw new Error(`供应商不存在：${providerId}`);
-  const route = resolveRoute('video', listModelRoutes(), providers, { providerId });
-  if (!route.adapter.queryVideo) throw new Error(`供应商「${provider.name}」不支持视频任务查询`);
-  return route.adapter.queryVideo(route.ctx, taskId);
+  const adapter = getAdapter(provider.protocol);
+  if (!adapter.queryVideo) throw new Error(`供应商「${provider.name}」不支持视频任务查询`);
+  // 必须查询提交任务的供应商，不能因用户切换路由而把任务 ID 发到另一接口。
+  return adapter.queryVideo({
+    providerId: provider.id, providerName: provider.name, baseUrl: provider.baseUrl,
+    credentials: provider.credentials ?? {}, extraHeaders: provider.extraHeaders,
+    timeoutSec: provider.timeoutSec ?? 120,
+  }, taskId);
 }
 
 /** 供应商连通性检测 */
@@ -137,7 +142,7 @@ export async function fetchProviderBalance(providerId: string) {
   if (!provider) throw new Error(`供应商不存在：${providerId}`);
   const adapter = getAdapter(provider.protocol);
   if (!adapter.fetchBalance) {
-    return { supported: false as const, detail: `「${provider.name}」暂不支持余额查询（仅 OpenAI 兼容 / NewAPI / OneAPI 支持）` };
+    return { supported: false as const, detail: `「${provider.name}」暂不支持余额查询（需接口提供余额查询能力）` };
   }
   const result = await adapter.fetchBalance({
     providerId: provider.id,

@@ -3,6 +3,9 @@
 import { useEffect, useState } from 'react';
 import { Badge, Button, Empty, Textarea } from '@/components/ui';
 import type {
+  QaReport,
+  QaSummary,
+  QaVerdict,
   ReplicateAnalysis,
   ScreenplayVersion,
   ShotPreviewPlan,
@@ -24,6 +27,8 @@ import {
   runShotPreviewAction,
   saveScreenplayVersionAction,
 } from '@/app/actions/features';
+import { getProjectQaSummaryAction, startQaReviewAction } from '@/app/actions/qa';
+import { reshootShotAction } from '@/app/actions/production';
 
 /**
  * 流程层功能面板：⑦ 智能预演 / ⑧ 剧本版本 / ⑩ 爆款复刻 / 重制转绘
@@ -523,6 +528,198 @@ function RedrawCard({
               ▶ {done > 0 ? '继续重绘' : '开始重绘'}
             </button>
           ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+
+/* ------------------------------ ⑨ 成片 QA ------------------------------ */
+
+const QA_VERDICT_META: Record<QaVerdict, { label: string; tone: 'green' | 'amber' | 'red' }> = {
+  pass: { label: '✓ 通过', tone: 'green' },
+  warn: { label: '⚠ 有隐患', tone: 'amber' },
+  fail: { label: '✗ 废片', tone: 'red' },
+};
+
+const QA_REPORT_ORDER: QaVerdict[] = ['fail', 'warn', 'pass'];
+
+/** 成片 QA 与自动修复：ffprobe 探针 + 视觉评审，自动挡住废片 */
+export function QaPanel({ projectId, running }: { projectId: string; running?: boolean }) {
+  const [summary, setSummary] = useState<QaSummary | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = async () => {
+    const result = await getProjectQaSummaryAction(projectId);
+    if (result.ok && result.data) setSummary(result.data);
+  };
+
+  useEffect(() => {
+    void load();
+  }, [projectId]);
+
+  // QA 任务在跑时轮询汇总，完成即刷新
+  useEffect(() => {
+    if (!running) return;
+    const timer = setInterval(() => {
+      void load();
+    }, 3000);
+    return () => clearInterval(timer);
+  }, [running]);
+
+  const handleStart = async (refresh: boolean) => {
+    setBusy(true);
+    setError(null);
+    const result = await startQaReviewAction(projectId, { refresh });
+    if (!result.ok) setError(result.error ?? '提交 QA 任务失败');
+    setBusy(false);
+    void load();
+  };
+
+  const handleReshoot = async (shotId: string) => {
+    setBusy(true);
+    setError(null);
+    const result = await reshootShotAction(shotId);
+    if (!result.ok) setError(result.error ?? '重抽失败');
+    setBusy(false);
+    void load();
+  };
+
+  const handleReshootAll = async () => {
+    if (!summary) return;
+    const failedShots = summary.reports.filter((report) => report.verdict === 'fail' && report.shotId);
+    if (failedShots.length === 0) return;
+    setBusy(true);
+    setError(null);
+    for (const report of failedShots) {
+      const result = await reshootShotAction(report.shotId as string);
+      if (!result.ok) {
+        setError(result.error ?? '部分镜头重抽失败');
+        break;
+      }
+    }
+    setBusy(false);
+    void load();
+  };
+
+  const reports = summary?.reports ?? [];
+  const ordered = [...reports].sort((a, b) => QA_REPORT_ORDER.indexOf(a.verdict) - QA_REPORT_ORDER.indexOf(b.verdict));
+  const failedCount = summary?.failed ?? 0;
+
+  return (
+    <div className="rounded-lg border border-[#242a36] bg-[#0e1116] p-2.5">
+      <div className="mb-2 flex items-center gap-1.5">
+        <Badge tone="pink">⑨ 成片 QA</Badge>
+        <span className="text-[10px] text-slate-500">ffprobe 探针 + 视觉评审 · 自动挡废片</span>
+      </div>
+      <p className="mb-2 text-[11px] leading-relaxed text-slate-400">
+        对每个生成片段做两道体检：先跑 ffprobe 探针（可解码性 / 时长 / 分辨率 / 帧率 / 黑屏），再抽首中尾三帧让视觉模型打分。未通过的片段自动踢出镜头选中位，并标记待重抽。
+      </p>
+      <div className="mb-2 flex flex-wrap gap-1.5">
+        <Button size="sm" variant="primary" loading={busy} onClick={() => void handleStart(false)} title="只检查尚未通过的片段（省额度）">
+          🧪 {running ? 'QA 检查中…' : '开始 QA 检查'}
+        </Button>
+        <Button size="sm" variant="default" disabled={busy || running} onClick={() => void handleStart(true)} title="强制重查全部片段（含已通过）">
+          ⟳ 强制重查
+        </Button>
+        <Button
+          size="sm"
+          variant="default"
+          disabled={busy || failedCount === 0}
+          onClick={() => void handleReshootAll()}
+          title="把所有未通过的镜头重新交给视频模型"
+        >
+          🔁 一键重抽（{failedCount}）
+        </Button>
+      </div>
+      {error ? <div className="mb-2 text-[11px] text-red-300">{error}</div> : null}
+      {summary && summary.total > 0 ? (
+        <div className="mb-2 flex flex-wrap gap-1.5">
+          <Badge tone="default">共 {summary.total}</Badge>
+          <Badge tone="green">通过 {summary.passed}</Badge>
+          <Badge tone="amber">隐患 {summary.warned}</Badge>
+          <Badge tone="red">废片 {summary.failed}</Badge>
+          {summary.skipped > 0 ? <Badge tone="blue">跳过 {summary.skipped}</Badge> : null}
+        </div>
+      ) : null}
+      {ordered.length > 0 ? (
+        <div className="space-y-1.5">
+          {ordered.map((report) => (
+            <QaReportCard key={report.id} report={report} busy={busy} onReshoot={handleReshoot} />
+          ))}
+        </div>
+      ) : (
+        <Empty text="还没有 QA 报告，点击「开始 QA 检查」体检已生成的片段" />
+      )}
+    </div>
+  );
+}
+
+
+/** 单条 QA 报告卡片：评级徽标 + 评分 + 问题清单 + 重抽按钮 */
+function QaReportCard({
+  report,
+  busy,
+  onReshoot,
+}: {
+  report: QaReport;
+  busy: boolean;
+  onReshoot: (shotId: string) => Promise<void>;
+}) {
+  const meta = QA_VERDICT_META[report.verdict];
+  const score = report.review?.score;
+  const probe = report.probe;
+  const probeLine = [
+    probe.durationSec ? `${probe.durationSec.toFixed(1)}s` : null,
+    probe.width && probe.height ? `${probe.width}x${probe.height}` : null,
+    probe.fps ? `${probe.fps.toFixed(0)}fps` : null,
+    probe.blackScreen === true ? '黑屏' : null,
+    probe.hasAudio === false ? '无声' : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+
+  return (
+    <div className="rounded-md border border-[#242a36] bg-[#12151c] px-2 py-1.5">
+      <div className="flex items-center gap-2">
+        <Badge tone={meta.tone}>{meta.label}</Badge>
+        {score !== undefined && score !== null ? (
+          <span
+            className={`shrink-0 text-[10px] font-medium ${score >= 60 ? 'text-emerald-300' : score >= 45 ? 'text-amber-300' : 'text-red-300'}`}
+          >
+            {score} 分
+          </span>
+        ) : null}
+        <span className="flex-1 truncate text-[11px] text-slate-400" title={report.mediaId}>
+          {report.shotId ? `镜头片段 ${report.mediaId.slice(-8)}` : `媒体 ${report.mediaId.slice(-12)}`}
+        </span>
+        {report.verdict === 'fail' && report.shotId ? (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void onReshoot(report.shotId as string)}
+            className="shrink-0 rounded bg-red-500/10 px-2 py-0.5 text-[10px] text-red-300 transition-colors hover:bg-red-500/20 disabled:opacity-50"
+            title="把这个镜头重新交给视频模型生成"
+          >
+            🔁 重抽
+          </button>
+        ) : null}
+      </div>
+      {probeLine ? <div className="mt-1 text-[10px] text-slate-500">{probeLine}</div> : null}
+      {report.issues.length > 0 ? (
+        <div className="mt-1 space-y-0.5">
+          {report.issues.slice(0, 3).map((issue, index) => (
+            <div key={index} className="truncate text-[10px] text-slate-400" title={issue}>
+              · {issue}
+            </div>
+          ))}
+        </div>
+      ) : null}
+      {report.review?.summary ? (
+        <div className="mt-1 truncate text-[10px] text-slate-500" title={report.review.summary}>
+          {report.review.summary}
         </div>
       ) : null}
     </div>

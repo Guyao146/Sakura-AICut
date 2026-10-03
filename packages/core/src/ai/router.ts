@@ -43,7 +43,7 @@ function pickModel(provider: ProviderConfig, modelId: string): ModelEntry | unde
  * @param capability 需要的能力
  * @param routes     用户配置的路由表
  * @param providers  全部供应商（credentials 需已解密）
- * @param override   临时覆盖（例如「本次用可灵生成」）
+ * @param override   临时覆盖（例如「本次用指定接口生成」）
  */
 export function resolveRoute(
   capability: Capability,

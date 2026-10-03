@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
+import { LogoutButton } from './LogoutButton';
 
 /**
  * 应用外壳：左侧主导航
@@ -36,11 +37,12 @@ export function AppShell({ children, active }: { children: ReactNode; active?: s
             );
           })}
         </nav>
-        <div className="rounded-lg border border-[#242a36] bg-[#12151c] p-3 text-[11px] leading-relaxed text-slate-500">
+        <div className="mb-2 rounded-lg border border-[#242a36] bg-[#12151c] p-3 text-[11px] leading-relaxed text-slate-500">
           无限画布 · AI 短剧/电影生成
           <br />
           五步流程：设定 → 剧本 → 资产 → 分镜 → 剪辑
         </div>
+        <LogoutButton />
       </aside>
       <main className="flex min-w-0 flex-1 flex-col">{children}</main>
     </div>

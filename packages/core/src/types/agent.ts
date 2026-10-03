@@ -24,6 +24,7 @@ export type AgentToolName =
   | 'canvas.organize'
   | 'shot.preview'
   | 'replicate.analyze'
+  | 'qa.review'
   | 'finish';
 
 export interface AgentStep {

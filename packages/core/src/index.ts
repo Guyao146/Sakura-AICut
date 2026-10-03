@@ -16,12 +16,14 @@ export * from './types/job';
 export * from './types/redraw';
 export * from './types/agent';
 export * from './types/prompt';
+export * from './types/qa';
 
 // DB 不导出 CreateCanvasItemInput，由 db 仓储包导出
 
 // 工具
 export * from './utils/id';
 export * from './utils/text';
+export * from './utils/jobs';
 
 // 版本号（由 pnpm bump 同步）
 export { APP_VERSION } from './version';

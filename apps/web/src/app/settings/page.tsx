@@ -1,4 +1,4 @@
-import { bootstrap, getAppSettings, listCustomCameraMoves, listPromptTemplates } from '@sakura/db';
+import { bootstrap, getAppSettings, listCustomCameraMoves, listOidcProviders, listPromptTemplates } from '@sakura/db';
 import { AppShell, PageHeader } from '@/components/AppShell';
 import { SettingsClient } from '@/components/settings/SettingsClient';
 import { connectedRoutesSummary } from '@/lib/server/ai';
@@ -24,7 +24,7 @@ export default async function SettingsPage({
     <AppShell active="settings">
       <PageHeader
         title="设置"
-        subtitle="接入模型供应商（NewAPI / OneAPI / 火山引擎 / 可灵 / MiniMax / 百炼 …）、配置能力路由、管理提示词与运镜模板"
+        subtitle="接入自定义模型服务、配置能力路由、管理提示词与运镜模板"
         extra={<Badge tone="pink">v{packageJson.version}</Badge>}
       />
       <SettingsClient
@@ -57,6 +57,17 @@ export default async function SettingsPage({
             category: move.category,
             prompt: move.prompt,
             description: move.description,
+          })),
+          oidcProviders: listOidcProviders().map((provider) => ({
+            id: provider.id,
+            name: provider.name,
+            kind: provider.kind,
+            issuer: provider.issuer,
+            clientId: provider.clientId,
+            hasSecret: provider.hasSecret,
+            scope: provider.scope,
+            enabled: provider.enabled,
+            label: provider.label,
           })),
           settings: getAppSettings(),
           initialTab: tab ?? 'providers',

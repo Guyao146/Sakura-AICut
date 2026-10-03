@@ -1,0 +1,17 @@
+name: 品牌信息检查
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  check-brands:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: 检查品牌中立规则
+        run: node scripts/check-brands.mjs
+      - name: 验证检查器
+        run: node --test scripts/check-brands.test.mjs

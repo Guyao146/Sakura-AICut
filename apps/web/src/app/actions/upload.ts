@@ -11,11 +11,25 @@ import { createMedia } from '@sakura/db';
  * 处理画布素材上传（图片 / 视频 / 音频）
  * 文件落盘后返回可访问 URL 与元数据
  */
+/** 允许上传的扩展名白名单；svg / html 等可被浏览器同源执行的类型一律拒绝（存储型 XSS） */
+const ALLOWED_EXTS = new Set([
+  '.png', '.jpg', '.jpeg', '.webp', '.gif',
+  '.mp4', '.mov', '.webm', '.mkv',
+  '.mp3', '.wav', '.m4a', '.aac', '.flac',
+  '.srt', '.txt', '.json',
+]);
+
+const MAX_UPLOAD_BYTES = 512 * 1024 * 1024; // 512MB
+
 export async function uploadCanvasMediaAction(
   projectId: string,
   file: File,
 ): Promise<{ ok: boolean; data?: MediaFile; error?: string }> {
   try {
+    if (file.size > MAX_UPLOAD_BYTES) {
+      return { ok: false, error: '文件超过 512MB 上限' };
+    }
+
     const buffer = await file.arrayBuffer();
     const bytes = new Uint8Array(buffer);
 
@@ -27,6 +41,9 @@ export async function uploadCanvasMediaAction(
 
     // 文件保存
     const ext = extname(file.name).toLowerCase() || (kind === 'image' ? '.jpg' : kind === 'video' ? '.mp4' : '.mp3');
+    if (!ALLOWED_EXTS.has(ext)) {
+      return { ok: false, error: `不支持的文件类型：${ext || '未知'}` };
+    }
     const filename = `${kind}_${createId(10)}${ext}`;
     const mediaDir = join(dataDir(), 'media', projectId);
     mkdirSync(mediaDir, { recursive: true });

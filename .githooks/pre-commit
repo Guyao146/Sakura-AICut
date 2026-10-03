@@ -1,0 +1,9 @@
+#!/bin/sh
+# 提交前检查整个暂存树，避免部分暂存绕过工作区检查。
+# 启用方式：git config core.hooksPath .githooks
+node scripts/check-brands.mjs --staged
+status=$?
+if [ $status -ne 0 ]; then
+  echo "提交已被阻止。请移除品牌文案；必要技术例外须按贡献规则逐条审查。"
+  exit 1
+fi

@@ -39,6 +39,7 @@ import {
   applyCanvasTemplateAction,
   importShotsToCanvasAction,
   importCanvasJsonAction,
+  canvasAiAction,
   generateCanvasItemsAction,
   selectCanvasItemVariantAction,
   clearCanvasItemVariantsAction,
@@ -52,16 +53,20 @@ import {
   resetCanvasItemSizesAction,
 } from '@/app/actions/canvas';
 import { CanvasInspector } from './CanvasInspector';
+import { canvasGenerationTargets, clampDockPosition, reconcileCanvasNodes } from './canvas-state';
 import { GroupDialog } from './GroupDialog';
 import { MentionPopup, buildMentionables, useMentionTrigger, type Mentionable } from './MentionPopup';
 import { closeAllContextMenus, openContextMenu, type MenuItem } from './contextMenu';
-import type { CanvasItem, CanvasGroup } from '@sakura/core';
+import type { CanvasItem, CanvasGroup, CanvasNodeJobState, Job } from '@sakura/core';
 import {
   CANVAS_ITEM_KIND_LABELS,
   CANVAS_NODE_ROLE_LABELS,
   CANVAS_TEMPLATES,
   DEFAULT_NODE_SIZE,
   builtinCameraMoves,
+  getCanvasNodeJobStates,
+  hasJobFailures,
+  isActiveJob,
 } from '@sakura/core';
 import { setShotFrameAction } from '@/app/actions/production';
 
@@ -74,6 +79,7 @@ interface CanvasItemNodeData {
   onResizeEnd: (params: ResizeParams) => void;
   onDelete: () => Promise<void>;
   onBringToFront: () => Promise<void>;
+  onShowAi?: () => void;
   onGenerate?: (itemIds: string[]) => void;
   /** 图片节点发到镜头首/尾帧（多参创作联动） */
   onSendToShot?: (mediaId: string, shotId: string, which: 'first' | 'last') => void;
@@ -102,6 +108,8 @@ interface CanvasItemNodeData {
   mentionables?: Mentionable[];
   /** 该节点正在生成媒体（边框流动微光） */
   generating?: boolean;
+  /** 以任务为准的节点状态：排队中 / 生成中 / 已完成 / 生成失败 / 已取消 */
+  jobState?: CanvasNodeJobState;
 }
 
 function CanvasItemNode({ data, selected }: { data: CanvasItemNodeData; selected?: boolean }) {
@@ -113,6 +121,7 @@ function CanvasItemNode({ data, selected }: { data: CanvasItemNodeData; selected
     onDelete,
     onBringToFront,
     onGenerate,
+    onShowAi,
     onSendToShot,
     shots,
     onGroup,
@@ -127,7 +136,16 @@ function CanvasItemNode({ data, selected }: { data: CanvasItemNodeData; selected
     screenplayEntities,
     mentionables,
     generating,
+    jobState,
   } = data;
+  // 已完成的节点不挂徽标（图片本身就是结果）；失败/取消要显式提示，否则用户不知道为什么没有图
+  const jobBadge = jobState && jobState.status !== 'succeeded'
+    ? {
+        text: `✦ ${jobState.label}`,
+        title: jobState.error ?? jobState.label,
+        className: jobState.status === 'failed' ? 'text-red-300' : jobState.status === 'canceled' ? 'text-slate-400' : 'text-sky-300',
+      }
+    : null;
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState(item.text);
   const [caret, setCaret] = useState(0);
@@ -135,6 +153,10 @@ function CanvasItemNode({ data, selected }: { data: CanvasItemNodeData; selected
   const mention = useMentionTrigger(text, caret);
   const [mentionAnchor, setMentionAnchor] = useState<{ x: number; y: number } | null>(null);
   const handleResizeEnd = useCallback<OnResizeEnd>((_, params) => onResizeEnd(params), [onResizeEnd]);
+
+  useEffect(() => {
+    if (!editing) setText(item.text);
+  }, [item.text, editing]);
 
   const handleSaveText = async () => {
     if (text !== item.text) await onUpdate({ text });
@@ -244,6 +266,7 @@ function CanvasItemNode({ data, selected }: { data: CanvasItemNodeData; selected
 
     /** 通用尾部项：所有节点共享 */
     const commonOptions: MenuItem[] = [
+      { label: 'AI 优化 / 生成…', icon: '✨', action: () => onShowAi?.(), hide: !onShowAi },
       { label: '置顶', icon: '⬆️', action: () => void onBringToFront() },
       {
         label: groupId ? '解组' : '成组（需多选）',
@@ -356,8 +379,10 @@ function CanvasItemNode({ data, selected }: { data: CanvasItemNodeData; selected
           </span>
         ) : null}
         {groupId ? <span className="text-[10px] text-pink-300/80">◈ 已分组</span> : null}
-        {generating ? (
-          <span className="agent-badge-running ml-auto shrink-0 text-[10px] text-sky-300">✦ 生成中</span>
+        {onShowAi ? <button type="button" className="nodrag pointer-events-auto shrink-0 rounded px-1 text-[10px] text-pink-300 hover:bg-pink-400/10"
+          onClick={(event) => { event.stopPropagation(); onShowAi(); }} title="基于输入文字或节点内容进行 AI 优化与生成">✨ AI</button> : null}
+        {jobBadge ? (
+          <span className={clsx('ml-auto shrink-0 text-[10px]', jobBadge.className, generating && 'agent-badge-running')} title={jobBadge.title}>{jobBadge.text}</span>
         ) : null}
       </div>
       {editing ? (
@@ -450,7 +475,7 @@ const DEFAULT_EDGE_OPTIONS = {
   style: { stroke: '#f472b6', strokeWidth: 2 },
 };
 
-/** 画幅比例选项（对齐小云雀「视频偏好 / 图片偏好」前置到生成入口） */
+/** 画幅比例选项（画幅偏好前置到生成入口） */
 const ASPECT_RATIOS: Array<{ label: string; value: string; icon: string; hint?: string }> = [
   { label: '横屏 16:9', value: '16:9', icon: '🖥️', hint: '电影 / 横屏短片' },
   { label: '竖屏 9:16', value: '9:16', icon: '📱', hint: '短剧 / 信息流' },
@@ -458,7 +483,18 @@ const ASPECT_RATIOS: Array<{ label: string; value: string; icon: string; hint?: 
   { label: '宽幕 21:9', value: '21:9', icon: '🎬', hint: '院线感宽屏' },
 ];
 
-function CanvasInner({ data, projectId }: { data: StudioData; projectId: string }) {
+function CanvasInner({
+  data,
+  projectId,
+  onJobAccepted,
+  onOpenTasks,
+}: {
+  data: StudioData;
+  projectId: string;
+  /** 提交成功后立刻把任务并入轮询列表，节点马上显示「排队中」 */
+  onJobAccepted?: (job: Job) => void;
+  onOpenTasks?: () => void;
+}) {
   const [items, setItems] = useState<CanvasItem[]>(data.canvasItems);
   const [groups, setGroups] = useState<CanvasGroup[]>(data.canvasGroups);
   const [itemGroups, setItemGroups] = useState<Record<string, string>>(data.itemGroups);
@@ -500,12 +536,11 @@ function CanvasInner({ data, projectId }: { data: StudioData; projectId: string 
     let latest = origin;
     const onMove = (ev: PointerEvent) => {
       // 拖拽手柄最多移动到容器边缘，留出工具栏高度的一半
-      const maxX = Math.max(0, (pane?.clientWidth ?? 800) - 240);
-      const maxY = Math.max(0, (pane?.clientHeight ?? 600) - 48);
-      latest = {
-        x: Math.min(maxX, Math.max(0, origin.x + ev.clientX - start.x)),
-        y: Math.min(maxY, Math.max(0, origin.y + ev.clientY - start.y)),
-      };
+      latest = clampDockPosition(
+        { x: origin.x + ev.clientX - start.x, y: origin.y + ev.clientY - start.y },
+        { width: pane?.clientWidth ?? 800, height: pane?.clientHeight ?? 600 },
+        { width: 240, height: 48 },
+      );
       setDockPos(latest);
     };
     const onUp = () => {
@@ -523,102 +558,86 @@ function CanvasInner({ data, projectId }: { data: StudioData; projectId: string 
 
   // 服务端数据变化时（如 worker 生成完成后 router.refresh()）合并内容字段：
   // kind/url/mediaId/text 跟随服务端，坐标/尺寸保留本地值，避免和拖动状态打架。
+  // 尚未落库的乐观节点必须保留，否则并发的 router.refresh() 会把它们抹掉。
+  const pendingItemIds = useRef<Set<string>>(new Set());
   useEffect(() => {
     const serverById = new Map(data.canvasItems.map((it) => [it.id, it]));
     setItems((prev) => {
-      let changed = false;
       const next = prev.map((local) => {
         const remote = serverById.get(local.id);
+        // 尚未出现在快照中的乐观创建节点先保留，避免被较早的刷新响应抹掉。
         if (!remote) return local;
-        if (
-          remote.kind === local.kind &&
-          remote.url === local.url &&
-          remote.mediaId === local.mediaId &&
-          remote.text === local.text
-        ) {
-          return local;
-        }
-        changed = true;
-        return { ...local, kind: remote.kind, url: remote.url, mediaId: remote.mediaId, text: remote.text };
+        return { ...remote, x: local.x, y: local.y, width: local.width, height: local.height };
       });
-      // 服务端新增的节点（如导入布局）直接追加
-      const added = data.canvasItems.filter((it) => !prev.some((p) => p.id === it.id));
-      if (!changed && added.length === 0) return prev;
-      return added.length > 0 ? [...next, ...added] : next;
-    });
-    // 内容已回填的节点不再是「生成中」（url 从空变非空即代表生成完成）
-    setGeneratingIds((prev) => {
-      if (prev.size === 0) return prev;
-      const still = new Set<string>();
-      const localById = new Map(data.canvasItems.map((it) => [it.id, it]));
-      for (const id of prev) {
-        const remote = localById.get(id);
-        // 仍在生成的条件：服务端还没有该节点的媒体产物
-        if (remote && !remote.url) still.add(id);
+      const localIds = new Set(prev.map((item) => item.id));
+      // 服务端删除的节点（其它标签页或 Agent 的删除操作）也要同步移除，
+      // 但不能动尚未落库的乐观节点。
+      const removed = next.filter((item) => !serverById.has(item.id) && !pendingItemIds.current.has(item.id));
+      if (removed.length > 0) {
+        const keep = new Set([...serverById.keys(), ...pendingItemIds.current]);
+        return [...next.filter((item) => keep.has(item.id)), ...data.canvasItems.filter((item) => !localIds.has(item.id))];
       }
-      return still.size === prev.size ? prev : still;
+      return [...next, ...data.canvasItems.filter((item) => !localIds.has(item.id))];
     });
   }, [data.canvasItems]);
 
   /* ------------------------------ 画布内 AI 生成 ------------------------------ */
 
-  // 正在生成的节点 id 集合：节点级「生成中」反馈（对齐 RunningHub「节点即计算」）
-  const [generatingIds, setGeneratingIds] = useState<Set<string>>(new Set());
+  // 节点级生成状态以真实任务为准：排队 / 生成中 / 失败 / 取消都能识别，
+  // 刷新页面或重新生成（节点已有 url）时不再误判为「已完成」。
+  const jobStates = useMemo(
+    () => getCanvasNodeJobStates(data.jobs, projectId),
+    [data.jobs, projectId],
+  );
+  const generatingIds = useMemo(() => {
+    const next = new Set<string>();
+    for (const [id, state] of jobStates) if (isActiveJob(state)) next.add(id);
+    return next;
+  }, [jobStates]);
   const generating = generatingIds.size > 0;
+  const failedJobCount = data.jobs.filter((job) => job.projectId === projectId && hasJobFailures(job)).length;
 
   const handleGenerateImages = useCallback(
     async (itemIds: string[], aspectRatio?: string) => {
       if (itemIds.length === 0) return;
-      setGeneratingIds((prev) => {
-        const next = new Set(prev);
-        for (const id of itemIds) next.add(id);
-        return next;
-      });
       try {
         const result = await generateCanvasItemsAction(projectId, itemIds, aspectRatio ? { aspectRatio } : {});
         if (!result.ok) {
           alert(result.error ?? '提交生成失败');
-          setGeneratingIds((prev) => {
-            const next = new Set(prev);
-            for (const id of itemIds) next.delete(id);
-            return next;
-          });
+          return;
         }
+        // 提交成功后立即把任务并入列表，节点马上显示「排队中」，不用等 3 秒轮询
+        if (result.data?.job) onJobAccepted?.(result.data.job);
       } catch {
-        setGeneratingIds((prev) => {
-          const next = new Set(prev);
-          for (const id of itemIds) next.delete(id);
-          return next;
-        });
+        alert('提交生成失败，请检查网络后重试');
       }
     },
-    [projectId],
+    [projectId, onJobAccepted],
   );
 
-  // 生成目标：有选中用选中，否则取全部有内容的文字节点
+  // 生成目标：有选中用选中（过滤无提示词的节点），否则回退全部文字节点；已在队列中的不重复提交
   const generateTargets = useMemo(
-    () =>
-      selectedIds.length > 0
-        ? selectedIds
-        : items.filter((it) => it.kind === 'text' && it.text.trim()).map((it) => it.id),
-    [selectedIds, items],
+    () => canvasGenerationTargets(items, selectedIds, generatingIds),
+    [items, selectedIds, generatingIds],
   );
 
-  // 画幅比例选择（对齐小云雀「模型选择 / 视频偏好」前置到生成入口）
+  // 画幅偏好：只改参数，不立即生成（前置到生成入口）
+  const [aspectRatio, setAspectRatio] = useState<string>(data.project.brief.aspectRatio ?? '9:16');
+  const aspectLabel = ASPECT_RATIOS.find((ratio) => ratio.value === aspectRatio)?.label ?? aspectRatio;
+
   const showAspectRatioMenu = useCallback(
     (e: React.MouseEvent<HTMLButtonElement>) => {
-      const targets = generateTargets;
       openContextMenu(
         ASPECT_RATIOS.map((ratio) => ({
           label: `${ratio.label}${ratio.hint ? ` · ${ratio.hint}` : ''}`,
           icon: ratio.icon,
-          action: () => void handleGenerateImages(targets, ratio.value),
+          action: () => setAspectRatio(ratio.value),
         })),
         e.clientX,
         e.clientY,
       );
     },
-    [generateTargets, handleGenerateImages],
+    [],
   );
 
   // 画布图片 → 镜头首/尾帧（多参创作联动）
@@ -667,9 +686,11 @@ function CanvasInner({ data, projectId }: { data: StudioData; projectId: string 
             const result = await bringCanvasItemToFrontAction(item.id);
             if (result.ok && result.data) setItems((prev) => prev.map((it) => (it.id === item.id ? result.data! : it)).sort((a, b) => a.z - b.z));
           },
-          onGenerate: (ids: string[]) => void handleGenerateImages(ids),
+          onShowAi: () => setSelectedIds([item.id]),
+          onGenerate: (ids: string[]) => void handleGenerateImages(ids, aspectRatio),
           // 节点级「生成中」反馈：边框流动微光
           generating: generatingIds.has(item.id),
+          jobState: jobStates.get(item.id),
           onSendToShot: (mediaId: string, shotId: string, which: 'first' | 'last') =>
             void handleSendToShot(mediaId, shotId, which),
           shots: data.shots.map((shot) => ({ id: shot.id, index: shot.index, description: shot.description })),
@@ -755,7 +776,8 @@ function CanvasInner({ data, projectId }: { data: StudioData; projectId: string 
         draggable: true,
         type: 'default',
       })) as Node[],
-    [items, itemGroups, handleGenerateImages, handleSendToShot],
+    [items, itemGroups, handleGenerateImages, handleSendToShot, jobStates, generatingIds, aspectRatio,
+      projectId, data.shots, data.screenplay, data.assets, data.media],
   );
 
   // 关键：nodes 由 ReactFlow 自管状态，拖动时实时更新位置，不会被 items 旧值覆盖
@@ -813,18 +835,11 @@ function CanvasInner({ data, projectId }: { data: StudioData; projectId: string 
   // 连线、选中状态等变化不应导致 React Flow 重新同步整个节点数组。
   const allNodes = useMemo(() => [...groupNodes, ...rfNodes], [groupNodes, rfNodes]);
 
-  // 节点数量或内容变化（新建/删除/生成完成）时重建，拖动/缩放中的位置与尺寸由 ReactFlow 内部维护
-  const itemContentKey = items
-    .map((it) => `${it.id}:${it.kind}:${it.url ?? ''}:${it.mediaId ?? ''}:${it.text.slice(0, 40)}`)
-    .join('|');
-  // buildNodes 的引用随 items 变化，但缩放只会改 width/height/x/y（不影响 contentKey），
-  // 因此这里只认 contentKey/数量，避免把刚缩放完的节点重建掉、丢失 selected 状态。
-  const buildNodesRef = useRef(buildNodes);
-  buildNodesRef.current = buildNodes;
+  // 同步服务端内容与任务状态，但保留 React Flow 管理的位置、尺寸和选中状态。
+  // 不能仅比较 URL 或截断后的提示词，否则排队/失败/取消与画幅偏好不会传到节点。
   useEffect(() => {
-    setRfNodes(buildNodesRef.current());
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [items.length, itemContentKey, setRfNodes]);
+    setRfNodes((prev) => reconcileCanvasNodes(prev, buildNodes()));
+  }, [buildNodes, setRfNodes]);
 
   // 拖入连线（持久化到数据库）
   const onConnect = useCallback(
@@ -888,26 +903,6 @@ function CanvasInner({ data, projectId }: { data: StudioData; projectId: string 
       }
     },
     [projectId, setRfNodes],
-  );
-
-  const showOrganizeMenu = useCallback(
-    (e: React.MouseEvent<HTMLButtonElement>) => {
-      openContextMenu(
-        [
-          { label: '横向展开（按连线分层）', icon: '↔', action: () => void handleOrganize('tree-h') },
-          { label: '纵向展开（按连线分层）', icon: '↕', action: () => void handleOrganize('tree-v') },
-          { label: '按角色 / 场景分组', icon: '👥', action: () => void handleOrganize('by-role') },
-          {
-            label: hideEdges ? '显示连线' : '隐藏连线（专注结构）',
-            icon: hideEdges ? '👁️' : '🚫',
-            action: () => setHideEdges((v) => !v),
-          },
-        ],
-        e.clientX,
-        e.clientY,
-      );
-    },
-    [handleOrganize, hideEdges],
   );
 
   // 应用画布模板
@@ -1100,6 +1095,8 @@ function CanvasInner({ data, projectId }: { data: StudioData; projectId: string 
       const result = await updateCanvasItemAction(inspectorItem.id, patch);
       if (result.ok && result.data) {
         setItems((prev) => prev.map((it) => (it.id === inspectorItem.id ? result.data! : it)));
+      } else {
+        throw new Error(result.error || '保存节点失败');
       }
     },
     [inspectorItem],
@@ -1223,12 +1220,26 @@ function CanvasInner({ data, projectId }: { data: StudioData; projectId: string 
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
+      pendingItemIds.current.add(id);
       setItems((prev) => [...prev, newItem]);
       createCanvasItemAction(projectId, { kind, text: newItem.text, url: newItem.url, x, y, width: newItem.width, height: newItem.height, z: newItem.z })
         .then((result) => {
-          if (result.ok && result.data) setItems((prev) => prev.map((it) => (it.id === id ? result.data! : it)));
+          pendingItemIds.current.delete(id);
+          if (result.ok && result.data) {
+            // 并发的 router.refresh() 可能已经把服务端创建的节点送进 items。
+            // 直接把临时 id 换成真实 id 会与已存在的真实节点重复，造成 React Flow key 冲突。
+            setItems((prev) => (prev.some((it) => it.id === result.data!.id)
+              ? prev.filter((it) => it.id !== id)
+              : prev.map((it) => (it.id === id ? result.data! : it))));
+          } else {
+            setItems((prev) => prev.filter((it) => it.id !== id));
+            if (!result.ok) alert(result.error ?? '创建节点失败');
+          }
         })
-        .catch(() => { setItems((prev) => prev.filter((it) => it.id !== id)); });
+        .catch(() => {
+          pendingItemIds.current.delete(id);
+          setItems((prev) => prev.filter((it) => it.id !== id));
+        });
     },
     [projectId, items],
   );
@@ -1298,6 +1309,32 @@ function CanvasInner({ data, projectId }: { data: StudioData; projectId: string 
       }
     }
   }, [onRfNodesChange]);
+
+  // 模板 / 布局 / 导入导出收进菜单，dock 只留最常用操作
+  const showMoreMenu = useCallback(
+    (e: React.MouseEvent<HTMLButtonElement>) => {
+      openContextMenu(
+        [
+          { label: '横向展开（按连线分层）', icon: '↔', action: () => void handleOrganize('tree-h') },
+          { label: '纵向展开（按连线分层）', icon: '↕', action: () => void handleOrganize('tree-v') },
+          { label: '按角色 / 场景分组', icon: '👥', action: () => void handleOrganize('by-role') },
+          { label: hideEdges ? '显示连线' : '隐藏连线（专注结构）', icon: hideEdges ? '👁️' : '🚫', action: () => setHideEdges((v) => !v) },
+          { label: '把分镜批量铺到画布', icon: '🎞', action: () => void handleImportShots() },
+          { label: '导出布局 JSON 备份', icon: '⬇', action: () => void handleExportJson() },
+          { label: '从 JSON 快照恢复布局', icon: '⬆', action: () => handleImportJson() },
+          { label: '恢复节点默认尺寸', icon: '📐', action: () => void handleResetSizes(), hide: items.length === 0 },
+          ...CANVAS_TEMPLATES.map((template) => ({
+            label: `套用模板：${template.name}`,
+            icon: '🌸',
+            action: () => void handleApplyTemplate(template.id),
+          })),
+        ],
+        e.clientX,
+        e.clientY,
+      );
+    },
+    [handleOrganize, hideEdges, handleImportShots, handleExportJson, handleImportJson, handleResetSizes, items.length, handleApplyTemplate],
+  );
 
   return (
     <div
@@ -1378,12 +1415,12 @@ function CanvasInner({ data, projectId }: { data: StudioData; projectId: string 
           >
             🎬 成组{selectedIds.length > 1 ? ` (${selectedIds.length})` : ''}
           </button>
-          {/* 生成图片：主按钮直接生成，右侧按钮选比例（对齐小云雀「模型选择」前置） */}
+          {/* 生成图片：直接用当前画幅生成；画幅在旁边单独选，改参数不立即触发 */}
           <button
             type="button"
-            onClick={() => void handleGenerateImages(generateTargets)}
-            disabled={locked || generating || generateTargets.length === 0}
-            className="rounded-lg px-2.5 py-1 text-[11px] text-amber-300 transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
+            onClick={() => void handleGenerateImages(generateTargets, aspectRatio)}
+            disabled={locked || generateTargets.length === 0}
+            className="rounded-lg bg-amber-500/15 px-2.5 py-1 text-[11px] text-amber-300 transition-colors hover:bg-amber-500/25 disabled:cursor-not-allowed disabled:opacity-40"
             title={selectedIds.length > 0 ? '为选中的节点生成图片（文字 → 图片）' : '把画布上的文字节点批量生成图片'}
           >
             {generating ? `⏳ 生成中 (${generatingIds.size})…` : '✨ 生成图片'}
@@ -1396,63 +1433,37 @@ function CanvasInner({ data, projectId }: { data: StudioData; projectId: string 
               e.stopPropagation();
               showAspectRatioMenu(e);
             }}
-            disabled={locked || generating || generateTargets.length === 0}
-            className="rounded-lg px-1.5 py-1 text-[11px] text-amber-300/80 transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
-            title="选择画幅比例后生成"
+            disabled={locked}
+            className="rounded-lg px-2 py-1 text-[11px] text-amber-300/80 transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
+            title="选择画幅比例（只改参数，不立即生成）"
           >
-            ▾
+            {aspectLabel} ▾
           </button>
+          <button
+            type="button"
+            onClick={() => onOpenTasks?.()}
+            disabled={!generating && failedJobCount === 0}
+            className={clsx(
+              'rounded-lg px-2.5 py-1 text-[11px] transition-colors disabled:cursor-not-allowed disabled:opacity-40',
+              failedJobCount > 0 ? 'bg-red-500/15 text-red-300 hover:bg-red-500/25' : 'text-slate-300 hover:bg-white/10',
+            )}
+            title={generating || failedJobCount > 0 ? '查看任务进度、失败原因与重试' : '提交生成后可在此跟踪任务'}
+          >
+            📋 任务{generating ? ` (${generatingIds.size})` : failedJobCount > 0 ? ` · ${failedJobCount} 需关注` : ''}
+          </button>
+          <div className="mx-0.5 w-px bg-[#333b4a]" />
           <button
             type="button"
             onClick={(e) => {
               e.preventDefault();
-              showOrganizeMenu(e);
+              showMoreMenu(e);
             }}
             disabled={locked}
             className="rounded-lg px-2.5 py-1 text-[11px] text-slate-300 transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
-            title="整理画布：横向 / 纵向展开，按角色场景分组，或隐藏连线"
+            title="整理画布、导入导出布局、套用模板"
           >
-            🧹 整理画布 ▾
+            ⋯ 更多 ▾
           </button>
-          <button
-            type="button"
-            onClick={() => void handleImportShots()}
-            disabled={locked}
-            className="rounded-lg px-2.5 py-1 text-[11px] text-slate-300 transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
-            title="把第四步的分镜批量铺到画布"
-          >
-            🎞 导入分镜
-          </button>
-          <button
-            type="button"
-            onClick={() => void handleExportJson()}
-            className="rounded-lg px-2.5 py-1 text-[11px] text-slate-300 transition-colors hover:bg-white/10"
-            title="导出画布布局为 JSON 备份"
-          >
-            ⬇ 导出布局
-          </button>
-          <button
-            type="button"
-            onClick={handleImportJson}
-            disabled={locked}
-            className="rounded-lg px-2.5 py-1 text-[11px] text-slate-300 transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
-            title="从 JSON 快照恢复布局"
-          >
-            ⬆ 导入布局
-          </button>
-          <div className="mx-0.5 w-px bg-[#333b4a]" />
-          {CANVAS_TEMPLATES.map((template) => (
-            <button
-              key={template.id}
-              type="button"
-              onClick={() => void handleApplyTemplate(template.id)}
-              disabled={locked}
-              title={template.description}
-              className="rounded-lg px-2.5 py-1 text-[11px] text-pink-300/90 transition-colors hover:bg-pink-500/10 disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              📐 {template.name}
-            </button>
-          ))}
         </div>
         {/* 第二行：对齐分布 + 锁定 + 搜索 */}
         <div className="flex flex-wrap items-center gap-1.5">
@@ -1505,7 +1516,24 @@ function CanvasInner({ data, projectId }: { data: StudioData; projectId: string 
       )}
 
       <CanvasInspector
+        key={inspectorItem?.id ?? 'none'}
         item={inspectorItem}
+        locked={locked}
+        jobState={inspectorItem ? jobStates.get(inspectorItem.id) : undefined}
+        onAi={async (input) => {
+          if (!inspectorItem || locked) return;
+          const result = await canvasAiAction(projectId, inspectorItem.id, { ...input, aspectRatio });
+          if (!result.ok || !result.data) throw new Error(result.error || '提交 AI 操作失败');
+          const accepted = result.data;
+          setItems((prev) => prev.map((it) => it.id === accepted.item.id ? { ...it, text: accepted.item.text } : it));
+          onJobAccepted?.(accepted.job);
+        }}
+        onSelectVariant={async (mediaId) => {
+          if (!inspectorItem || locked) return;
+          const result = await selectCanvasItemVariantAction(inspectorItem.id, mediaId);
+          if (!result.ok || !result.data) throw new Error(result.error || '恢复历史结果失败');
+          setItems((prev) => prev.map((it) => it.id === inspectorItem.id ? result.data! : it));
+        }}
         groupName={inspectorItem ? (groups.find((g) => g.id === itemGroups[inspectorItem.id])?.name ?? null) : null}
         onClose={() => setSelectedIds([])}
         onUpdate={handleInspectorUpdate}
@@ -1530,7 +1558,7 @@ function CanvasInner({ data, projectId }: { data: StudioData; projectId: string 
       />
 
       {items.length === 0 && (
-        // 空画布引导（对齐 RunningHub「快捷创作」模板专区）：不只是提示，直接给可点入口
+        // 空画布引导（快捷模板专区）：不只是提示，直接给可点入口
         <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
           <div className="pointer-events-auto w-[420px] max-w-[88vw] animate-pop-in rounded-2xl border border-[#242a36] bg-[#12151c]/90 p-5 text-center shadow-2xl backdrop-blur">
             <div className="mb-1 text-2xl">🌸</div>
@@ -1561,6 +1589,18 @@ function CanvasInner({ data, projectId }: { data: StudioData; projectId: string 
   );
 }
 
-export function StudioCanvasBoard({ data }: { data: StudioData }) {
-  return (<ReactFlowProvider><CanvasInner data={data} projectId={data.project.id} /></ReactFlowProvider>);
+export function StudioCanvasBoard({
+  data,
+  onJobAccepted,
+  onOpenTasks,
+}: {
+  data: StudioData;
+  onJobAccepted?: (job: Job) => void;
+  onOpenTasks?: () => void;
+}) {
+  return (
+    <ReactFlowProvider>
+      <CanvasInner data={data} projectId={data.project.id} onJobAccepted={onJobAccepted} onOpenTasks={onOpenTasks} />
+    </ReactFlowProvider>
+  );
 }

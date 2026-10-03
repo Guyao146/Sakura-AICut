@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { Asset, Screenplay } from '@sakura/core';
 
 /**
- * ② @ 素材引用（对齐小云雀抽卡记录旁的 @ 引用能力）
+ * ② @ 素材引用
  *
  * 在文本类节点里输入 @ 时弹出候选浮层：项目资产 / 剧本人物 / 场景 / 道具。
  * 选中后把「@名称」插入文本，并返回被引用实体，供调用方做联动（如高亮、批量替换提示词）。

@@ -22,7 +22,7 @@ import {
 } from '../utils';
 
 /**
- * MiniMax 海螺适配器
+ * 文件任务接口适配器
  * - 文本：POST /v1/text/chatcompletion_v2
  * - 图片：POST /v1/image_generation（同步返回）
  * - 视频：POST /v1/video_generation（异步）→ GET /v1/query/video_generation?task_id=
@@ -50,13 +50,13 @@ interface MmBaseResp {
 function assertMmOk(payload: MmBaseResp | undefined, action: string): void {
   const code = payload?.base_resp?.status_code;
   if (code !== undefined && code !== 0) {
-    throw new Error(`MiniMax ${action} 失败（code=${code}）：${payload?.base_resp?.status_msg ?? ''}`);
+    throw new Error(`文件任务接口 ${action} 失败（code=${code}）：${payload?.base_resp?.status_msg ?? ''}`);
   }
 }
 
-export const minimaxAdapter: ProviderAdapter = {
+export const fileTasksAdapter: ProviderAdapter = {
   protocol: 'minimax',
-  label: 'MiniMax 海螺',
+  label: '文件任务接口',
 
   async chat(ctx: AdapterContext, req: TextGenerateRequest): Promise<TextGenerateResult> {
     const payload = await fetchJson<
@@ -139,7 +139,7 @@ export const minimaxAdapter: ProviderAdapter = {
     );
     assertMmOk(payload, '视频任务提交');
     const taskId = String(payload?.task_id ?? '');
-    if (!taskId) throw new Error(`MiniMax 视频任务提交失败：${JSON.stringify(payload).slice(0, 300)}`);
+    if (!taskId) throw new Error(`文件任务接口 视频任务提交失败：${JSON.stringify(payload).slice(0, 300)}`);
     return { taskId, raw: payload };
   },
 

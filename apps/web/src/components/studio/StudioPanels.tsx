@@ -133,7 +133,7 @@ export function StepBriefPanel({ data, busy, run }: PanelProps) {
         <Field label="目标受众 / 平台" hint="影响 Agent 的口吻与节奏">
           <Input
             value={brief.audience ?? ''}
-            placeholder="例如：抖音女频观众"
+            placeholder="例如：短剧女性观众"
             onChange={(event) => setBrief({ ...brief, audience: event.target.value })}
           />
         </Field>

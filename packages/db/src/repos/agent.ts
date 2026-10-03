@@ -1,6 +1,7 @@
 import type { AgentChatTurn, AgentPlan, AgentStep } from '@sakura/core';
 import { createId } from '@sakura/core';
-import { buildUpdate, getDb, intToBool, nowIso, parseJson, toJson } from '../client';
+import { buildUpdate, getDb, intToBool, nowIso, parseJson, toJson, transaction } from '../client';
+import { cancelJob, listJobs } from './jobs';
 
 /**
  * Agent 计划与对话仓储
@@ -127,6 +128,25 @@ export function updatePlan(
   return getPlan(id) as AgentPlan;
 }
 
+/** 同时停止计划和队列；旧任务的取消请求不能影响同一计划的新一轮执行。 */
+export function cancelAgentPlan(id: string, expectedJobId?: string): AgentPlan | null {
+  return transaction(() => {
+    const plan = getPlan(id);
+    if (!plan || (expectedJobId && plan.jobId !== expectedJobId)) return plan;
+    if (plan.status === 'completed' || plan.status === 'failed' || plan.status === 'canceled') return plan;
+    for (const job of listJobs({ projectId: plan.projectId, targetType: 'agent', targetId: id,
+      status: ['pending', 'queued', 'running'], limit: -1 })) {
+      if (job.type === 'agent.run') cancelJob(job.id);
+    }
+    const finishedAt = nowIso();
+    const steps = plan.steps.map((step) =>
+      step.status === 'succeeded' || step.status === 'skipped' || step.status === 'failed'
+        ? step : { ...step, status: 'canceled' as const, finishedAt },
+    );
+    return updatePlan(id, { status: 'canceled', question: null, steps });
+  });
+}
+
 /** 更新单个步骤（按 index） */
 export function updatePlanStep(planId: string, stepIndex: number, patch: Partial<AgentStep>): AgentPlan {
   const plan = getPlan(planId);
@@ -195,9 +215,9 @@ export function addTurn(input: {
 
 export function listTurns(planId: string, limit = 200): AgentChatTurn[] {
   const rows = getDb()
-    .prepare('SELECT * FROM agent_turns WHERE plan_id = ? ORDER BY created_at ASC LIMIT ?')
+    .prepare('SELECT * FROM agent_turns WHERE plan_id = ? ORDER BY created_at DESC, rowid DESC LIMIT ?')
     .all(planId, limit) as unknown as TurnRow[];
-  return rows.map((row) => ({
+  return rows.reverse().map((row) => ({
     id: row.id,
     planId: row.plan_id,
     projectId: row.project_id,

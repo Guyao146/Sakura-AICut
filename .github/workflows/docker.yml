@@ -17,6 +17,7 @@ on:
       - 'apps/**'
       - 'packages/**'
       - 'docker/**'
+      - '.dockerignore'
       - 'docker-compose.yml'
       - 'package.json'
       - 'pnpm-lock.yaml'
@@ -68,14 +69,19 @@ jobs:
       - name: 提取版本标签
         id: meta
         shell: bash
+        env:
+          IMAGE: ${{ matrix.image }}
         run: |
-          tags="latest"
-          if [[ "${{ github.event_name }}" == "release" ]]; then
-            ver="${GITHUB_REF_NAME#v}"
-            tags="latest,stable,$ver"
-          fi
-          echo "tags=$tags" >> "$GITHUB_OUTPUT"
-          echo "发布标签：$tags"
+          {
+            echo 'tags<<EOF'
+            echo "$IMAGE:latest"
+            echo "$IMAGE:sha-${GITHUB_SHA:0:7}"
+            if [[ "$GITHUB_EVENT_NAME" == "release" ]]; then
+              echo "$IMAGE:stable"
+              echo "$IMAGE:${GITHUB_REF_NAME#v}"
+            fi
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
 
       - name: 构建并发布 ${{ matrix.target }}
         uses: docker/build-push-action@v6
@@ -84,8 +90,37 @@ jobs:
           file: ${{ matrix.dockerfile }}
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: |
-            ${{ matrix.image }}:${{ steps.meta.outputs.tags }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
           cache-from: type=gha,scope=${{ matrix.target }}
           cache-to: type=gha,mode=max,scope=${{ matrix.target }}
           provenance: false
+
+      - name: 验证镜像启动
+        shell: bash
+        env:
+          IMAGE: ${{ matrix.image }}
+          TARGET: ${{ matrix.target }}
+        run: |
+          set -euo pipefail
+          image="$IMAGE:sha-${GITHUB_SHA:0:7}"
+          name="sakura-smoke-$TARGET"
+          trap 'docker logs "$name"; docker rm -fv "$name" >/dev/null' EXIT
+          docker pull --platform linux/amd64 "$image"
+          docker run -d --platform linux/amd64 --name "$name" "$image"
+          for attempt in $(seq 1 40); do
+            if [[ "$TARGET" == "web" ]]; then
+              if docker exec "$name" node -e "fetch('http://127.0.0.1:3000/login',{redirect:'manual'}).then(r=>process.exit(r.status===200?0:1)).catch(()=>process.exit(1))"; then
+                docker exec "$name" node -e "fetch('http://127.0.0.1:3000/api/jobs',{redirect:'manual'}).then(r=>process.exit(r.status===401?0:1)).catch(()=>process.exit(1))"
+                exit 0
+              fi
+            elif docker logs "$name" 2>&1 | grep -q 'Worker 已启动'; then
+              test "$(docker inspect -f '{{.State.Running}}' "$name")" = true
+              exit 0
+            fi
+            sleep 3
+          done
+          echo '镜像启动检查超时'
+          exit 1

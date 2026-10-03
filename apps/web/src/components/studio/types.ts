@@ -6,6 +6,7 @@ import type {
   CanvasGroup,
   CanvasItem,
   MediaFile,
+  Job,
   Project,
   PromptTemplate,
   Screenplay,
@@ -21,6 +22,7 @@ import type {
 
 export interface StudioData {
   project: Project;
+  jobs: Job[];
   screenplay: Screenplay | null;
   /** ⑧ 剧本版本（最新在前） */
   screenplayVersions: ScreenplayVersion[];

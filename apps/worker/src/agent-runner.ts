@@ -40,6 +40,7 @@ import {
   planShotPreview,
   planShotsFromScreenplay,
   renderTimeline,
+  reviewProjectClips,
   runShotPreview,
   runText,
   submitShotVideo,
@@ -55,10 +56,26 @@ export interface AgentRunOptions extends HandlerContext {
   autoApprove: boolean;
 }
 
+function agentStopStatus(planId: string, options: AgentRunOptions): 'paused' | 'canceled' | null {
+  const plan = getPlan(planId);
+  if (plan?.status === 'paused') return 'paused';
+  if (!plan || plan.status === 'canceled' || options.isCanceled()
+    || (plan.jobId && plan.jobId !== options.job.id)) return 'canceled';
+  return null;
+}
+
 export async function runAgentPlan(planId: string, options: AgentRunOptions): Promise<Record<string, unknown>> {
   const { log, progress, autoApprove } = options;
   let plan = getPlan(planId);
   if (!plan) throw new Error(`Agent 计划不存在：${planId}`);
+  const stopped = () => {
+    const status = agentStopStatus(planId, options);
+    return status ? { status } : null;
+  };
+  const initialStop = stopped();
+  if (initialStop) return initialStop;
+  if (plan.status === 'completed' || plan.status === 'failed') return { status: plan.status, error: plan.error };
+  const toolOptions = { ...options, isCanceled: () => agentStopStatus(planId, options) !== null };
 
   // ---------- 1. 没有步骤时先规划 ----------
   if (plan.steps.length === 0) {
@@ -69,10 +86,14 @@ export async function runAgentPlan(planId: string, options: AgentRunOptions): Pr
   }
 
   // ---------- 2. 逐步执行 ----------
+  const afterPlanning = stopped();
+  if (afterPlanning) return afterPlanning;
   updatePlan(planId, { status: 'running', error: null });
   const steps = [...plan.steps];
 
   for (const step of steps) {
+    const beforeStep = stopped();
+    if (beforeStep) return beforeStep;
     const current = getPlan(planId);
     if (!current) break;
     const target = current.steps.find((item) => item.index === step.index);
@@ -106,7 +127,11 @@ export async function runAgentPlan(planId: string, options: AgentRunOptions): Pr
     });
 
     try {
-      const result = await executeAgentTool(current.projectId, target, options);
+      const beforeTool = stopped();
+      if (beforeTool) return beforeTool;
+      const result = await executeAgentTool(current.projectId, target, toolOptions);
+      const afterTool = stopped();
+      if (afterTool) return afterTool;
       if (target.tool === 'agent.ask_user') {
         updatePlanStep(planId, target.index, { status: 'waiting_approval', result });
         updatePlan(planId, {
@@ -137,6 +162,8 @@ export async function runAgentPlan(planId: string, options: AgentRunOptions): Pr
         return { status: 'completed', message: (result as { message?: string }).message ?? '' };
       }
     } catch (error) {
+      const afterError = stopped();
+      if (afterError) return afterError;
       const message = error instanceof Error ? error.message : String(error);
       updatePlanStep(planId, target.index, { status: 'failed', error: message, finishedAt: new Date().toISOString() });
       updatePlan(planId, { status: 'failed', error: message });
@@ -152,6 +179,8 @@ export async function runAgentPlan(planId: string, options: AgentRunOptions): Pr
     }
   }
 
+  const beforeFinish = stopped();
+  if (beforeFinish) return beforeFinish;
   updatePlan(planId, { status: 'completed', cursor: steps.length });
   return { status: 'completed' };
 }
@@ -168,8 +197,12 @@ async function planOnce(planId: string, options: AgentRunOptions) {
   try {
     const messages = buildPlannerMessages({ goal: plan.goal, snapshot });
     const result = await runText({ messages, json: true, temperature: 0.3, maxTokens: 4000 });
+    if (agentStopStatus(planId, options)) return getPlan(planId) ?? plan;
     const draft = parsePlanResponse(result.text);
     const steps = draftToSteps(draft);
+    // 计划级 question 只在「规划后先等用户回答」时才有意义；没有 ask_user 步骤时
+    // 它会残留下来，让后续「等待确认」的步骤也无法点确认（UI 优先渲染回答框）。
+    const question = steps.some((step) => step.tool === 'agent.ask_user') ? null : draft.question ?? null;
     addTurn({
       planId,
       projectId: plan.projectId,
@@ -179,12 +212,13 @@ async function planOnce(planId: string, options: AgentRunOptions) {
     });
     return updatePlan(planId, {
       summary: draft.summary,
-      question: draft.question ?? null,
+      question,
       steps,
       status: 'running',
       cursor: 0,
     });
   } catch (error) {
+    if (agentStopStatus(planId, options)) return getPlan(planId) ?? plan;
     const message = error instanceof Error ? error.message : String(error);
     log(`模型规划不可用，改用标准制片流程：${message}`, 'warn');
     return updatePlan(planId, {
@@ -347,7 +381,7 @@ async function executeAgentTool(
     case 'canvas.generate_image': {
       const itemIds = Array.isArray(args.itemIds) ? (args.itemIds as string[]) : [];
       if (itemIds.length === 0) throw new Error('请指定要生成的画布节点 ID');
-      const results = await generateCanvasItemsImage(itemIds, {});
+      const results = await generateCanvasItemsImage(itemIds, { isCanceled: options.isCanceled });
       return {
         total: results.length,
         succeeded: results.filter((item) => item.ok).length,
@@ -381,6 +415,28 @@ async function executeAgentTool(
       const analysis = await analyzeReference(reference, { keepStyle: args.keepStyle === undefined ? true : bool('keepStyle') });
       return { hooks: analysis.hooks.length, outline: analysis.outline.slice(0, 120) };
     }
+
+    case 'qa.review': {
+      const shotIndexes = Array.isArray(args.shotIndexes) ? (args.shotIndexes as number[]) : undefined;
+      const summary = await reviewProjectClips(projectId, {
+        shotIndexes,
+        withVision: args.withVision === undefined ? true : bool('withVision'),
+        autoFlag: args.autoFlag === undefined ? true : bool('autoFlag'),
+        refresh: bool('refresh'),
+        source: 'agent',
+        onProgress: (percent, stage) => log(`QA 进度 ${percent}%：${stage}`),
+        log,
+        isCanceled: options.isCanceled,
+      });
+      return {
+        total: summary.total,
+        passed: summary.passed,
+        warned: summary.warned,
+        failed: summary.failed,
+        skipped: summary.skipped,
+        reshootIndexes: summary.reshootIndexes,
+      };
+    }
   }
 
   return executeGenerationTool(projectId, step, options);
@@ -408,6 +464,7 @@ async function executeGenerationTool(
       let succeeded = 0;
       const failed: string[] = [];
       for (const asset of targets) {
+        if (options.isCanceled()) break;
         try {
           await generateAssetImage(asset.id, { variants: num('variants') });
           succeeded += 1;
@@ -438,8 +495,9 @@ async function executeGenerationTool(
       let succeeded = 0;
       const failed: string[] = [];
       for (const shot of targets) {
+        if (options.isCanceled()) break;
         try {
-          await runShotToCompletion(shot, { withFirstFrame, log });
+          await runShotToCompletion(shot, { withFirstFrame, log, isCanceled: options.isCanceled });
           succeeded += 1;
         } catch (error) {
           failed.push(`#${shot.index}: ${error instanceof Error ? error.message : String(error)}`);
@@ -492,13 +550,14 @@ async function executeGenerationTool(
 /** 单个镜头：提交 + 轮询直到完成 */
 async function runShotToCompletion(
   shot: Shot,
-  options: { withFirstFrame: boolean; log: (message: string, level?: 'info' | 'warn' | 'error') => void },
+  options: { withFirstFrame: boolean; log: (message: string, level?: 'info' | 'warn' | 'error') => void; isCanceled: () => boolean },
 ): Promise<void> {
   const { providerId, taskId } = await submitShotVideo(shot.id, { withFirstFrame: options.withFirstFrame });
   const timeoutMs = Number(process.env.ASYNC_TASK_TIMEOUT ?? 1800) * 1000;
   const startedAt = Date.now();
 
   for (;;) {
+    if (options.isCanceled()) throw new Error('Agent 已停止后续执行');
     if (Date.now() - startedAt > timeoutMs) throw new Error('视频任务超时');
     const state = await checkShotVideo(providerId, taskId);
     if (state.status === 'succeeded' && state.videoUrl) {

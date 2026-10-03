@@ -169,6 +169,19 @@ export const AGENT_TOOLS: AgentToolMeta[] = [
     },
   },
   {
+    name: 'qa.review',
+    label: '成片 QA 检查',
+    description:
+      '用 ffprobe 校验已生成片段（损坏 / 黑屏 / 时长 / 分辨率），并用视觉模型评审画面可用度，给出重抽建议。批量生成镜头后建议执行一次。',
+    requiresApproval: false,
+    argsSchema: {
+      shotIndexes: 'number[] 可选，只检查指定镜头；不填则检查全部已生成片段',
+      withVision: 'boolean 可选，是否调视觉模型评审（更准更慢），默认 true',
+      autoFlag: 'boolean 可选，是否把不达标片段自动取消选中并标记镜头待重抽，默认 true',
+      refresh: 'boolean 可选，是否重查已通过的历史报告，默认 false（增量跳过省钱）',
+    },
+  },
+  {
     name: 'finish',
     label: '完成并汇报',
     description: '结束执行并给出总结。',

@@ -2,7 +2,7 @@ import type { ReplicateAnalysis } from '@sakura/core';
 import { runText } from './ai';
 
 /**
- * 爆款复刻（⑩，对齐小云雀爆款复刻入口）
+ * 爆款复刻（⑩）
  *
  * 输入参考视频链接或文案，让文本模型拆解「为什么火」（钩子、结构、节奏、画风），
  * 再据此产出一份可落地的新剧本大纲。纯文本推理，不调用视频模型。

@@ -17,7 +17,7 @@ import { saveMedia } from './storage';
  * 音色来源优先级：显式传入 > 出场角色的 voiceStyle > 供应商默认。
  */
 
-/** 常用 OpenAI 兼容音色（alloy 系中性、nova 女声、onyx 男声） */
+/** 常用兼容接口音色（alloy 系中性、nova 女声、onyx 男声） */
 export const TTS_VOICES: Array<{ id: string; label: string; gender: 'male' | 'female' | 'neutral' }> = [
   { id: 'alloy', label: 'Alloy · 中性', gender: 'neutral' },
   { id: 'echo', label: 'Echo · 男声', gender: 'male' },

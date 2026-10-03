@@ -16,7 +16,8 @@ export type JobType =
   | 'video.redraw'
   | 'timeline.render'
   | 'agent.run'
-  | 'provider.probe';
+  | 'provider.probe'
+  | 'qa.review';
 
 export const JOB_TYPE_LABELS: Record<JobType, string> = {
   'text.generate': '文本生成',
@@ -31,6 +32,7 @@ export const JOB_TYPE_LABELS: Record<JobType, string> = {
   'timeline.render': '时间线合成',
   'agent.run': 'Agent 执行',
   'provider.probe': '供应商连通性检测',
+  'qa.review': '成片 QA 检查',
 };
 
 export interface Job<T = unknown> extends Timestamps {
@@ -57,7 +59,7 @@ export interface Job<T = unknown> extends Timestamps {
   /** 心跳，用于僵尸任务回收 */
   heartbeatAt?: ISODateTime | null;
   /** 关联的实体（便于前端按实体查任务） */
-  targetType?: 'asset' | 'shot' | 'timeline' | 'project' | 'agent' | 'redraw' | null;
+  targetType?: 'asset' | 'shot' | 'timeline' | 'project' | 'agent' | 'redraw' | 'media' | null;
   targetId?: ID | null;
   /** 当前阶段描述（例如 "已提交、等待渲染中"） */
   stageLabel?: string | null;

@@ -216,7 +216,7 @@ function ShotRow({
   );
 }
 
-/** 片段版本列表：多版本切换 / 重拍 / 删除（libTV 片段重拍） */
+/** 片段版本列表：多版本切换 / 重拍 / 删除 */
 function ClipVersions({
   shotId,
   clipMediaIds,

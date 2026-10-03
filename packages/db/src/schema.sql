@@ -386,6 +386,25 @@ CREATE TABLE IF NOT EXISTS video_redraws (
 );
 CREATE INDEX IF NOT EXISTS idx_redraws_project ON video_redraws(project_id, created_at DESC);
 
+-- 成片 QA 报告（ffprobe 探针 + 视觉模型评审）
+CREATE TABLE IF NOT EXISTS qa_reports (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL,
+  media_id TEXT NOT NULL,
+  shot_id TEXT,
+  status TEXT NOT NULL DEFAULT 'pending',
+  probe_json TEXT NOT NULL DEFAULT '{}',
+  review_json TEXT,
+  verdict TEXT NOT NULL DEFAULT 'pass',
+  issues_json TEXT NOT NULL DEFAULT '[]',
+  source TEXT NOT NULL DEFAULT 'manual',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_qa_reports_project ON qa_reports(project_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_qa_reports_media ON qa_reports(media_id);
+
 -- 全局设置（键值）
 CREATE TABLE IF NOT EXISTS settings (
   key TEXT PRIMARY KEY,
@@ -398,4 +417,32 @@ CREATE TABLE IF NOT EXISTS migrations (
   id TEXT PRIMARY KEY,
   applied_at TEXT NOT NULL
 );
+
+-- 登录会话（本地账户登录后的会话记录，用于设备管理与踢出）
+CREATE TABLE IF NOT EXISTS sessions (
+  id TEXT PRIMARY KEY,
+  digest TEXT NOT NULL UNIQUE,
+  user_agent TEXT,
+  remote_address TEXT,
+  created_at TEXT NOT NULL,
+  last_seen_at TEXT NOT NULL,
+  revoked_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_sessions_last_seen ON sessions(last_seen_at DESC);
+
+-- OIDC 身份提供商（Sakura-Auth-Server / 通用 OIDC），可选接入
+CREATE TABLE IF NOT EXISTS oidc_providers (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  issuer TEXT NOT NULL,
+  client_id TEXT NOT NULL,
+  client_secret TEXT,
+  scope TEXT NOT NULL DEFAULT 'openid profile email',
+  enabled INTEGER NOT NULL DEFAULT 1,
+  label TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_oidc_kind_enabled ON oidc_providers(kind, enabled);
 

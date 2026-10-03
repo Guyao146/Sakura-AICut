@@ -91,7 +91,7 @@ export interface AudioGenerateRequest {
   model: string;
   /** 要合成的文本（台词 / 旁白 / 音效描述） */
   input: string;
-  /** 音色 ID 或名称（openai: alloy/echo/fable/onyx/nova/shimmer；各供应商自定义） */
+  /** 音色 ID 或名称（由接口定义） */
   voice?: string;
   /** 合成语言（一键出海：20 种语言） */
   language?: Language;

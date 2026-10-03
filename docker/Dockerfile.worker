@@ -14,10 +14,13 @@ COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
 COPY packages/core/package.json packages/core/
 COPY packages/db/package.json packages/db/
 COPY packages/pipeline/package.json packages/pipeline/
+# 保留 web 的清单以维持 workspace 形态（--frozen-lockfile 校验需要），但不会安装它的依赖
 COPY apps/web/package.json apps/web/
 COPY apps/worker/package.json apps/worker/
 
-RUN pnpm install --frozen-lockfile
+# 只装 worker 及其工作区依赖（@sakura/core / db / pipeline + zod + tsx）。
+# 不装 web 的前端栈（next / react / @xyflow/react / tailwind 等），省下数百 MB。
+RUN pnpm install --frozen-lockfile --filter @sakura/worker...
 
 COPY tsconfig.base.json ./
 COPY packages packages

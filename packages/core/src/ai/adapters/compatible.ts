@@ -27,16 +27,16 @@ import {
 } from '../utils';
 
 /**
- * OpenAI 兼容协议适配器
- * 覆盖：OpenAI 官方、NewAPI、OneAPI、DeepSeek、Moonshot、通义兼容模式、Ollama、vLLM 等
+ * 通用兼容协议适配器
+ * 覆盖：兼容标准接口的自定义模型服务
  *
  * - 文本：POST {base}/v1/chat/completions（支持流式）
  * - 图片：POST {base}/v1/images/generations
- * - 视频：POST {base}/v1/video/generations（Sora 风格异步接口）+ 轮询
+ * - 视频：POST {base}/v1/video/generations（异步任务接口）+ 轮询
  */
-export const openAICompatibleAdapter: ProviderAdapter = {
+export const compatibleAdapter: ProviderAdapter = {
   protocol: 'openai',
-  label: 'OpenAI 兼容',
+  label: '通用兼容接口',
 
   async chat(ctx, req: TextGenerateRequest): Promise<TextGenerateResult> {
     const url = joinUrl(ctx.baseUrl, '/v1/chat/completions');
@@ -131,7 +131,7 @@ export const openAICompatibleAdapter: ProviderAdapter = {
   },
 
   async audio(ctx, req: AudioGenerateRequest): Promise<AudioGenerateResult> {
-    // OpenAI 标准 TTS：POST /v1/audio/speech，直接返回二进制音频流
+    // 标准 TTS：POST /v1/audio/speech，直接返回二进制音频流
     const url = joinUrl(ctx.baseUrl, '/v1/audio/speech');
     const format = req.format ?? 'mp3';
     const body: Record<string, unknown> = {
@@ -242,14 +242,14 @@ export const openAICompatibleAdapter: ProviderAdapter = {
     const tryFetch = async (path: string) =>
       fetchJson<Record<string, unknown>>(joinUrl(ctx.baseUrl, path), { headers: authHeaders(ctx) }, contextOptions(ctx, 15_000));
 
-    // 1) NewAPI / OneAPI：/api/user/self（sk- 密钥即可查询）
+    // 1) 聚合网关：/api/user/self（sk- 密钥即可查询）
     try {
       const payload = await tryFetch('/api/user/self');
       const data = (payload?.data ?? payload) as Record<string, unknown> | undefined;
       const quota = Number(data?.quota);
       const usedQuota = Number(data?.used_quota);
       if (Number.isFinite(quota) && quota >= 0) {
-        // NewAPI 额度单位为美元的 500000 倍（quota_per_unit 默认 500000）
+        // 此接口额度单位为美元的 500000 倍（quota_per_unit 默认 500000）
         const perUnit = Number(data?.quota_per_unit) || 500_000;
         const balance = quota / perUnit;
         const used = Number.isFinite(usedQuota) ? usedQuota / perUnit : undefined;
@@ -265,7 +265,7 @@ export const openAICompatibleAdapter: ProviderAdapter = {
       /* 端点不存在或无权限，继续尝试下一种 */
     }
 
-    // 2) OpenAI 官方风格：/v1/dashboard/billing/credit_grants
+    // 2) 通用 官方风格：/v1/dashboard/billing/credit_grants
     try {
       const payload = await tryFetch('/v1/dashboard/billing/credit_grants');
       const grants = payload?.grants as Array<{ grant_amount?: number; used_amount?: number }> | undefined;

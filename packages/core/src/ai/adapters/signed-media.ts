@@ -15,7 +15,7 @@ import type {
 import { contextOptions, extractImages, mapRemoteStatus, normalizeBaseUrl, pickNumber } from '../utils';
 
 /**
- * 快手可灵 Kling（AK/SK 签名）
+ * 签名媒体接口（AK/SK 签名）
  * - JWT(HS256)：payload = { iss: accessKey, exp: now+1800, nbf: now-5 }
  * - 文生视频：POST /v1/videos/text2video   图生视频：POST /v1/videos/image2video
  * - 查询：GET  /v1/videos/{text2video|image2video}/{task_id}
@@ -26,12 +26,12 @@ function base64url(input: Buffer | string): string {
   return buf.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
-/** 生成可灵 JWT 鉴权头 */
-export function klingAuthHeader(ctx: AdapterContext): string {
+/** 生成签名媒体接口 JWT 鉴权头 */
+export function signedAuthHeader(ctx: AdapterContext): string {
   const { accessKey, secretKey, apiKey } = ctx.credentials;
   const ak = accessKey ?? apiKey ?? '';
   const sk = secretKey ?? '';
-  if (!ak || !sk) throw new Error('可灵需要同时配置 AccessKey 与 SecretKey');
+  if (!ak || !sk) throw new Error('签名媒体接口需要同时配置 AccessKey 与 SecretKey');
   const now = Math.floor(Date.now() / 1000);
   const header = base64url(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
   const payload = base64url(JSON.stringify({ iss: ak, exp: now + 1800, nbf: now - 5 }));
@@ -39,33 +39,33 @@ export function klingAuthHeader(ctx: AdapterContext): string {
   return `Bearer ${header}.${payload}.${signature}`;
 }
 
-function klingHeaders(ctx: AdapterContext): Record<string, string> {
-  return { 'Content-Type': 'application/json', ...(ctx.extraHeaders ?? {}), Authorization: klingAuthHeader(ctx) };
+function signedHeaders(ctx: AdapterContext): Record<string, string> {
+  return { 'Content-Type': 'application/json', ...(ctx.extraHeaders ?? {}), Authorization: signedAuthHeader(ctx) };
 }
 
-function klingUrl(ctx: AdapterContext, path: string): string {
+function signedUrl(ctx: AdapterContext, path: string): string {
   const base = normalizeBaseUrl(ctx.baseUrl);
   const suffix = path.replace(/^\/v1/, '');
   return base.endsWith('/v1') ? `${base}${suffix}` : `${base}/v1${suffix}`;
 }
 
-interface KlingEnvelope<T> {
+interface SignedEnvelope<T> {
   code?: number;
   message?: string;
   data?: T;
 }
 
-function unwrap<T>(payload: KlingEnvelope<T> | undefined, action: string): T {
-  if (!payload) throw new Error(`可灵 ${action} 返回空响应`);
+function unwrap<T>(payload: SignedEnvelope<T> | undefined, action: string): T {
+  if (!payload) throw new Error(`签名媒体接口 ${action} 返回空响应`);
   if (payload.code !== undefined && payload.code !== 0) {
-    throw new Error(`可灵 ${action} 失败（code=${payload.code}）：${payload.message ?? '未知错误'}`);
+    throw new Error(`签名媒体接口 ${action} 失败（code=${payload.code}）：${payload.message ?? '未知错误'}`);
   }
-  if (!payload.data) throw new Error(`可灵 ${action} 返回数据为空`);
+  if (!payload.data) throw new Error(`签名媒体接口 ${action} 返回数据为空`);
   return payload.data;
 }
 
-/** 可灵任务查询结果 → 统一状态 */
-function parseKlingTask(payload: KlingEnvelope<Record<string, unknown>>, action: string): AsyncTaskState {
+/** 任务查询结果 → 统一状态 */
+function parseSignedTask(payload: SignedEnvelope<Record<string, unknown>>, action: string): AsyncTaskState {
   const data = unwrap(payload, action);
   const rawStatus = String(data.task_status ?? 'processing');
   const result = (data.task_result ?? {}) as {
@@ -88,12 +88,12 @@ function parseKlingTask(payload: KlingEnvelope<Record<string, unknown>>, action:
   };
 }
 
-export const klingAdapter: ProviderAdapter = {
+export const signedMediaAdapter: ProviderAdapter = {
   protocol: 'kling',
-  label: '快手可灵 Kling',
+  label: '签名媒体接口',
 
   async chat(_ctx: AdapterContext, _req: TextGenerateRequest): Promise<TextGenerateResult> {
-    throw new Error('可灵不提供文本模型，请在「模型路由」中把文本能力指向其它供应商');
+    throw new Error('签名媒体接口不提供文本模型，请在「模型路由」中把文本能力指向其它供应商');
   },
 
   async image(ctx: AdapterContext, req: ImageGenerateRequest): Promise<ImageGenerateResult> {
@@ -109,9 +109,9 @@ export const klingAdapter: ProviderAdapter = {
       ...(req.seed !== undefined ? { seed: req.seed } : {}),
       ...(req.params ?? {}),
     };
-    const payload = await fetchJson<KlingEnvelope<Record<string, unknown>>>(
-      klingUrl(ctx, '/v1/images/generations'),
-      { method: 'POST', headers: klingHeaders(ctx), body: JSON.stringify(body) },
+    const payload = await fetchJson<SignedEnvelope<Record<string, unknown>>>(
+      signedUrl(ctx, '/v1/images/generations'),
+      { method: 'POST', headers: signedHeaders(ctx), body: JSON.stringify(body) },
       contextOptions(ctx),
     );
     const data = unwrap(payload, '图片生成');
@@ -132,41 +132,41 @@ export const klingAdapter: ProviderAdapter = {
       ...(isImageToVideo ? { image: req.firstFrameImage } : {}),
       ...(req.lastFrameImage ? { image_tail: req.lastFrameImage } : {}),
     };
-    const payload = await fetchJson<KlingEnvelope<Record<string, unknown>>>(
-      klingUrl(ctx, path),
-      { method: 'POST', headers: klingHeaders(ctx), body: JSON.stringify(body) },
+    const payload = await fetchJson<SignedEnvelope<Record<string, unknown>>>(
+      signedUrl(ctx, path),
+      { method: 'POST', headers: signedHeaders(ctx), body: JSON.stringify(body) },
       contextOptions(ctx),
     );
     const data = unwrap(payload, '视频任务提交');
     const taskId = String(data.task_id ?? '');
-    if (!taskId) throw new Error(`可灵视频任务提交失败：${JSON.stringify(payload).slice(0, 300)}`);
+    if (!taskId) throw new Error(`签名媒体接口视频任务提交失败：${JSON.stringify(payload).slice(0, 300)}`);
     return { taskId, raw: payload };
   },
 
   async queryVideo(ctx: AdapterContext, taskId: string): Promise<AsyncTaskState> {
-    const payload = await fetchJson<KlingEnvelope<Record<string, unknown>>>(
-      klingUrl(ctx, `/v1/videos/text2video/${taskId}`),
-      { headers: klingHeaders(ctx) },
+    const payload = await fetchJson<SignedEnvelope<Record<string, unknown>>>(
+      signedUrl(ctx, `/v1/videos/text2video/${taskId}`),
+      { headers: signedHeaders(ctx) },
       contextOptions(ctx),
     );
     if (payload?.code !== undefined && payload.code !== 0) {
       // 图生视频的任务需换接口查询
-      const fallback = await fetchJson<KlingEnvelope<Record<string, unknown>>>(
-        klingUrl(ctx, `/v1/videos/image2video/${taskId}`),
-        { headers: klingHeaders(ctx) },
+      const fallback = await fetchJson<SignedEnvelope<Record<string, unknown>>>(
+        signedUrl(ctx, `/v1/videos/image2video/${taskId}`),
+        { headers: signedHeaders(ctx) },
         contextOptions(ctx),
       );
-      return parseKlingTask(fallback, '视频查询');
+      return parseSignedTask(fallback, '视频查询');
     }
-    return parseKlingTask(payload, '视频查询');
+    return parseSignedTask(payload, '视频查询');
   },
 
   async probe(ctx: AdapterContext): Promise<ProbeResult> {
     const started = Date.now();
     try {
       await fetchJson(
-        klingUrl(ctx, '/v1/videos/text2video/probe-connection'),
-        { headers: klingHeaders(ctx) },
+        signedUrl(ctx, '/v1/videos/text2video/probe-connection'),
+        { headers: signedHeaders(ctx) },
         { ...contextOptions(ctx, 20_000), retries: 0 },
       );
       return { ok: true, message: '鉴权通过', latencyMs: Date.now() - started };

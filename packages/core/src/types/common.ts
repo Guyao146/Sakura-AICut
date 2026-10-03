@@ -88,7 +88,7 @@ export const LANGUAGE_OPTIONS: Array<{ value: Language; label: string }> = (
 
 /**
  * 爆款复刻（⑩）：上传参考视频 / 链接，AI 解析爆点后产出新剧本
- * 输入侧增强，对齐小云雀「爆款复刻」入口。
+ * 输入侧增强。
  */
 export interface ReplicateAnalysis {
   /** 解析出的爆款 DNA：为什么火 */

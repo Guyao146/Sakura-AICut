@@ -3,13 +3,43 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import clsx from 'clsx';
-import type { AgentChatTurn, AgentPlan } from '@sakura/core';
-import { Badge, Button, Card, Empty, Textarea } from '@/components/ui';
+import type { AgentChatTurn, AgentPlan, AgentPlanStatus, AgentStepStatus } from '@sakura/core';
+import { Badge, Button, Card, Empty, Progress, Textarea } from '@/components/ui';
 import { answerPlanAction, approvePlanAction, cancelPlanAction, startAgentPlanAction } from '@/app/actions/agent';
 
 /**
  * 自动规划 Agent 面板：目标 → 计划 → 逐步确认执行
  */
+
+/** 计划状态中文化 */
+const PLAN_STATUS_LABELS: Record<AgentPlanStatus, string> = {
+  planning: '规划中',
+  waiting_approval: '待确认',
+  running: '执行中',
+  paused: '已暂停',
+  completed: '已完成',
+  failed: '失败',
+  canceled: '已取消',
+};
+
+const STEP_STATUS_LABELS: Record<AgentStepStatus, string> = {
+  pending: '待执行',
+  queued: '排队中',
+  running: '执行中',
+  succeeded: '已完成',
+  failed: '失败',
+  canceled: '已取消',
+  waiting_approval: '待确认',
+  skipped: '已跳过',
+};
+
+/** 目标预设：不知道怎么描述时直接点 */
+const GOAL_PRESETS = [
+  '帮我做成 90 秒竖屏短剧：先出剧本，再出资产与分镜，最后拼好时间线',
+  '只出剧本和角色资产，分镜我自己来',
+  '从分镜一路到时间线合成，并完成配音',
+  '把画布上有提示词的节点全部生成图片',
+];
 
 export function AgentPanel({
   projectId,
@@ -43,13 +73,19 @@ export function AgentPanel({
   async function exec(fn: () => Promise<{ ok: boolean; error?: string }>) {
     setBusy(true);
     setError(null);
-    const result = await fn();
-    if (!result.ok) setError(result.error ?? '执行失败');
-    else {
-      router.refresh();
-      onRefresh();
+    try {
+      const result = await fn();
+      if (!result.ok) setError(result.error ?? '执行失败');
+      else {
+        router.refresh();
+        onRefresh();
+      }
+    } catch (cause) {
+      // Server Action 走网络，断网 / 超时也要给出可读原因，而不是静默卡住
+      setError(cause instanceof Error ? cause.message : '网络异常，请稍后重试');
+    } finally {
+      setBusy(false);
     }
-    setBusy(false);
   }
 
   return (
@@ -64,7 +100,7 @@ export function AgentPanel({
                 执行中
               </span>
             ) : plan ? (
-              plan.status
+              PLAN_STATUS_LABELS[plan.status] ?? plan.status
             ) : (
               '待启动'
             )}
@@ -91,6 +127,19 @@ export function AgentPanel({
           placeholder="例如：帮我做成 90 秒竖屏短剧：先出剧本，再出资产与分镜，最后拼好时间线"
           onChange={(event) => setGoal(event.target.value)}
         />
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {GOAL_PRESETS.map((preset) => (
+            <button
+              key={preset}
+              type="button"
+              onClick={() => setGoal(preset)}
+              className="max-w-full truncate rounded-full border border-[#2b3240] px-2.5 py-1 text-[10px] text-slate-400 transition-colors hover:border-pink-400/40 hover:text-slate-200"
+              title={preset}
+            >
+              {preset.length > 14 ? `${preset.slice(0, 14)}…` : preset}
+            </button>
+          ))}
+        </div>
         <div className="mt-2 flex gap-2">
           <Button
             variant="primary"
@@ -100,7 +149,7 @@ export function AgentPanel({
           >
             启动 Agent
           </Button>
-          {plan ? (
+          {plan && !['completed', 'failed', 'canceled'].includes(plan.status) ? (
             <Button loading={busy} variant="ghost" onClick={() => exec(() => cancelPlanAction(plan.id))}>
               取消计划
             </Button>
@@ -158,9 +207,19 @@ function PlanSteps({
     waiting_approval: 'amber',
   };
 
+  // 步骤进度：完成数 / 总数，让「还差几步」一目了然
+  const finished = plan.steps.filter((step) => step.status === 'succeeded').length;
+  const percent = plan.steps.length > 0 ? Math.round((finished / plan.steps.length) * 100) : 0;
+
   return (
-    <Card title="执行计划" extra={<span className="text-[11px] text-slate-500">{plan.steps.length} 步</span>}>
+    <Card title="执行计划" extra={<span className="text-[11px] text-slate-500">{plan.steps.length} 步 · {percent}%</span>}>
       <div className="mb-2 text-[11px] leading-relaxed text-slate-500">{plan.summary}</div>
+      {plan.steps.length > 0 ? (
+        <div className="mb-3 flex items-center gap-2">
+          <Progress value={percent} />
+          <span className="shrink-0 text-[10px] text-slate-500">{finished}/{plan.steps.length}</span>
+        </div>
+      ) : null}
 
       {plan.question ? (
         <div className="mb-3 rounded-lg border border-amber-500/30 bg-amber-500/10 p-2">
@@ -208,7 +267,7 @@ function PlanSteps({
                 {step.index + 1}. {step.title}
               </span>
               <Badge tone={toneByStatus[step.status] ?? 'default'}>
-                {step.status === 'running' ? '执行中…' : step.status}
+                {STEP_STATUS_LABELS[step.status] ?? step.status}
               </Badge>
             </div>
             <div className="mt-0.5 text-[11px] text-slate-500">{step.rationale}</div>

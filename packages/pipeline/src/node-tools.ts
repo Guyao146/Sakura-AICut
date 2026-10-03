@@ -9,7 +9,7 @@ import { runImage, runText } from './ai';
 import { saveMedia } from './storage';
 
 /**
- * 画布节点工具（⑥，对齐小云雀节点工具栏）
+ * 画布节点工具（⑥）
  *
  * 反解析 / 智能打光 / 镜头调节 / 全景 / 涂鸦 —— 都以现有节点为输入，
  * 生成新图片或新文本后回填到节点（保留抽卡记录）。

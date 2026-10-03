@@ -1,0 +1,405 @@
+{
+  "forbidden": [
+    "runninghub",
+    "小云雀",
+    "libtv",
+    "openai",
+    "anthropic",
+    "claude",
+    "gemini",
+    "google",
+    "kling",
+    "minimax",
+    "dashscope",
+    "seedance",
+    "seedream",
+    "qwen",
+    "通义",
+    "百炼",
+    "火山引擎",
+    "火山方舟",
+    "豆包",
+    "可灵",
+    "万相",
+    "comfyui",
+    "authentik",
+    "newapi",
+    "oneapi",
+    "deepseek",
+    "siliconflow",
+    "硅基流动",
+    "智谱",
+    "zhipu",
+    "volcengine",
+    "hunyuan",
+    "混元",
+    "flux",
+    "stable diffusion",
+    "runway",
+    "pika",
+    "sora",
+    "veo",
+    "hailuo",
+    "海螺",
+    "阿里云",
+    "腾讯",
+    "百度",
+    "字节跳动",
+    "ollama",
+    "cosyvoice",
+    "kolors",
+    "gpt",
+    "dall-e",
+    "快手",
+    "抖音",
+    "moonshot",
+    "midjourney",
+    "elevenlabs",
+    "nano banana",
+    "fishaudio",
+    "fish speech",
+    "cogvideo",
+    "vidu",
+    "pixverse",
+    "剪映",
+    "小红书",
+    "bilibili",
+    "youtube",
+    "luma",
+    "可图",
+    "new-api",
+    "one-api"
+  ],
+  "exceptions": [
+    {
+      "file": "packages/core/src/types/provider.ts",
+      "text": "| 'openai'",
+      "count": 1,
+      "reason": "持久化协议标识，保留已有配置兼容性"
+    },
+    {
+      "file": "packages/core/src/types/provider.ts",
+      "text": "  openai:",
+      "count": 1,
+      "reason": "持久化协议标识，保留已有配置兼容性"
+    },
+    {
+      "file": "packages/core/src/ai/registry.ts",
+      "text": "  openai:",
+      "count": 1,
+      "reason": "持久化协议标识，保留已有配置兼容性"
+    },
+    {
+      "file": "packages/core/src/ai/presets.ts",
+      "text": "protocol: 'openai'",
+      "count": 1,
+      "reason": "持久化协议标识，保留已有配置兼容性"
+    },
+    {
+      "file": "packages/core/src/ai/adapters/compatible.ts",
+      "text": "protocol: 'openai'",
+      "count": 1,
+      "reason": "持久化协议标识，保留已有配置兼容性"
+    },
+    {
+      "file": "packages/core/src/types/provider.ts",
+      "text": "| 'volcengine'",
+      "count": 1,
+      "reason": "持久化协议标识，保留已有配置兼容性"
+    },
+    {
+      "file": "packages/core/src/types/provider.ts",
+      "text": "  volcengine:",
+      "count": 1,
+      "reason": "持久化协议标识，保留已有配置兼容性"
+    },
+    {
+      "file": "packages/core/src/ai/registry.ts",
+      "text": "  volcengine:",
+      "count": 1,
+      "reason": "持久化协议标识，保留已有配置兼容性"
+    },
+    {
+      "file": "packages/core/src/ai/presets.ts",
+      "text": "protocol: 'volcengine'",
+      "count": 1,
+      "reason": "持久化协议标识，保留已有配置兼容性"
+    },
+    {
+      "file": "packages/core/src/ai/adapters/content-tasks.ts",
+      "text": "protocol: 'volcengine'",
+      "count": 1,
+      "reason": "持久化协议标识，保留已有配置兼容性"
+    },
+    {
+      "file": "packages/core/src/types/provider.ts",
+      "text": "| 'kling'",
+      "count": 1,
+      "reason": "持久化协议标识，保留已有配置兼容性"
+    },
+    {
+      "file": "packages/core/src/types/provider.ts",
+      "text": "  kling:",
+      "count": 1,
+      "reason": "持久化协议标识，保留已有配置兼容性"
+    },
+    {
+      "file": "packages/core/src/ai/registry.ts",
+      "text": "  kling:",
+      "count": 1,
+      "reason": "持久化协议标识，保留已有配置兼容性"
+    },
+    {
+      "file": "packages/core/src/ai/presets.ts",
+      "text": "protocol: 'kling'",
+      "count": 1,
+      "reason": "持久化协议标识，保留已有配置兼容性"
+    },
+    {
+      "file": "packages/core/src/ai/adapters/signed-media.ts",
+      "text": "protocol: 'kling'",
+      "count": 1,
+      "reason": "持久化协议标识，保留已有配置兼容性"
+    },
+    {
+      "file": "packages/core/src/types/provider.ts",
+      "text": "| 'minimax'",
+      "count": 1,
+      "reason": "持久化协议标识，保留已有配置兼容性"
+    },
+    {
+      "file": "packages/core/src/types/provider.ts",
+      "text": "  minimax:",
+      "count": 1,
+      "reason": "持久化协议标识，保留已有配置兼容性"
+    },
+    {
+      "file": "packages/core/src/ai/registry.ts",
+      "text": "  minimax:",
+      "count": 1,
+      "reason": "持久化协议标识，保留已有配置兼容性"
+    },
+    {
+      "file": "packages/core/src/ai/presets.ts",
+      "text": "protocol: 'minimax'",
+      "count": 1,
+      "reason": "持久化协议标识，保留已有配置兼容性"
+    },
+    {
+      "file": "packages/core/src/ai/adapters/file-tasks.ts",
+      "text": "protocol: 'minimax'",
+      "count": 1,
+      "reason": "持久化协议标识，保留已有配置兼容性"
+    },
+    {
+      "file": "packages/core/src/types/provider.ts",
+      "text": "| 'dashscope'",
+      "count": 1,
+      "reason": "持久化协议标识，保留已有配置兼容性"
+    },
+    {
+      "file": "packages/core/src/types/provider.ts",
+      "text": "  dashscope:",
+      "count": 1,
+      "reason": "持久化协议标识，保留已有配置兼容性"
+    },
+    {
+      "file": "packages/core/src/ai/registry.ts",
+      "text": "  dashscope:",
+      "count": 1,
+      "reason": "持久化协议标识，保留已有配置兼容性"
+    },
+    {
+      "file": "packages/core/src/ai/presets.ts",
+      "text": "protocol: 'dashscope'",
+      "count": 1,
+      "reason": "持久化协议标识，保留已有配置兼容性"
+    },
+    {
+      "file": "packages/core/src/ai/adapters/service-tasks.ts",
+      "text": "protocol: 'dashscope'",
+      "count": 1,
+      "reason": "持久化协议标识，保留已有配置兼容性"
+    },
+    {
+      "file": "packages/core/src/types/provider.ts",
+      "text": "| 'anthropic'",
+      "count": 1,
+      "reason": "持久化协议标识，保留已有配置兼容性"
+    },
+    {
+      "file": "packages/core/src/types/provider.ts",
+      "text": "  anthropic:",
+      "count": 1,
+      "reason": "持久化协议标识，保留已有配置兼容性"
+    },
+    {
+      "file": "packages/core/src/ai/registry.ts",
+      "text": "  anthropic:",
+      "count": 1,
+      "reason": "持久化协议标识，保留已有配置兼容性"
+    },
+    {
+      "file": "packages/core/src/ai/presets.ts",
+      "text": "protocol: 'anthropic'",
+      "count": 1,
+      "reason": "持久化协议标识，保留已有配置兼容性"
+    },
+    {
+      "file": "packages/core/src/ai/adapters/messages.ts",
+      "text": "protocol: 'anthropic'",
+      "count": 1,
+      "reason": "持久化协议标识，保留已有配置兼容性"
+    },
+    {
+      "file": "packages/core/src/types/provider.ts",
+      "text": "| 'gemini'",
+      "count": 1,
+      "reason": "持久化协议标识，保留已有配置兼容性"
+    },
+    {
+      "file": "packages/core/src/types/provider.ts",
+      "text": "  gemini:",
+      "count": 1,
+      "reason": "持久化协议标识，保留已有配置兼容性"
+    },
+    {
+      "file": "packages/core/src/ai/registry.ts",
+      "text": "  gemini:",
+      "count": 1,
+      "reason": "持久化协议标识，保留已有配置兼容性"
+    },
+    {
+      "file": "packages/core/src/ai/presets.ts",
+      "text": "protocol: 'gemini'",
+      "count": 1,
+      "reason": "持久化协议标识，保留已有配置兼容性"
+    },
+    {
+      "file": "packages/core/src/ai/adapters/content-generation.ts",
+      "text": "protocol: 'gemini'",
+      "count": 1,
+      "reason": "持久化协议标识，保留已有配置兼容性"
+    },
+    {
+      "file": "packages/core/src/ai/presets.ts",
+      "text": "protocol === 'kling'",
+      "count": 1,
+      "reason": "持久化协议标识，保留已有配置兼容性"
+    },
+    {
+      "file": "packages/core/src/ai/presets.ts",
+      "text": "protocol === 'minimax'",
+      "count": 1,
+      "reason": "持久化协议标识，保留已有配置兼容性"
+    },
+    {
+      "file": "apps/web/src/components/settings/SettingsTabs.tsx",
+      "text": "protocol: 'openai'",
+      "count": 1,
+      "reason": "持久化协议标识，保留已有配置兼容性"
+    },
+    {
+      "file": "scripts/studio-jobs.test.mjs",
+      "text": "protocol: 'openai'",
+      "count": 1,
+      "reason": "持久化协议标识，保留已有配置兼容性"
+    },
+    {
+      "file": "packages/core/src/ai/adapters/messages.ts",
+      "text": "'anthropic-version': '2023-06-01'",
+      "count": 1,
+      "reason": "远端接口要求的版本请求头"
+    },
+    {
+      "file": "packages/core/src/ai/adapters/messages.ts",
+      "text": "model: 'claude-3-5-haiku-latest'",
+      "count": 1,
+      "reason": "连通性探测要求的真实模型 ID"
+    },
+    {
+      "file": "packages/core/src/ai/adapters/content-generation.ts",
+      "text": "'models/gemini-2.5-flash:generateContent'",
+      "count": 1,
+      "reason": "连通性探测要求的真实模型路径"
+    },
+    {
+      "file": "packages/core/src/ai/adapters/file-tasks.ts",
+      "text": "model: 'MiniMax-Text-01'",
+      "count": 1,
+      "reason": "连通性探测要求的真实模型 ID"
+    },
+    {
+      "file": "packages/core/src/ai/adapters/service-tasks.ts",
+      "text": "'X-DashScope-Async': 'enable'",
+      "count": 1,
+      "reason": "远端接口要求的异步请求头"
+    },
+    {
+      "file": "apps/web/src/components/settings/SettingsTabs.tsx",
+      "text": "/sora|video|cogvideo|kling|seedance|wan|vidu|ltx|veo/",
+      "count": 1,
+      "reason": "从远端返回的模型 ID 推断能力，非显示文案"
+    },
+    {
+      "file": "apps/web/src/components/settings/SettingsTabs.tsx",
+      "text": "/image|dall|seedream|flux|sd|stable|gpt-image|imagen/",
+      "count": 1,
+      "reason": "从远端返回的模型 ID 推断能力，非显示文案"
+    },
+    {
+      "file": "apps/web/src/components/settings/SettingsTabs.tsx",
+      "text": "/tts|speech|audio|voice|music|cosyvoice/",
+      "count": 1,
+      "reason": "从远端返回的模型 ID 推断能力，非显示文案"
+    },
+    {
+      "file": "apps/web/src/app/api/auth/callback/[kind]/route.ts",
+      "text": "['sakura', 'authentik']",
+      "count": 1,
+      "reason": "保留身份服务已注册的旧回调路径"
+    },
+    {
+      "file": "apps/web/src/app/api/auth/login/[kind]/route.ts",
+      "text": "['sakura', 'authentik']",
+      "count": 1,
+      "reason": "保留身份服务已注册的旧回调路径"
+    },
+    {
+      "file": "apps/web/src/components/settings/OidcTab.tsx",
+      "text": "'sakura' | 'authentik'",
+      "count": 1,
+      "reason": "兼容已有身份提供商类型"
+    },
+    {
+      "file": "apps/web/src/components/settings/OidcTab.tsx",
+      "text": "  authentik:",
+      "count": 1,
+      "reason": "兼容已有身份提供商类型，仅键名保留"
+    },
+    {
+      "file": "packages/db/src/repos/oidc.ts",
+      "text": "'sakura' | 'authentik'",
+      "count": 1,
+      "reason": "兼容已有身份提供商类型"
+    },
+    {
+      "file": "packages/db/src/repos/oidc.ts",
+      "text": "  authentik:",
+      "count": 1,
+      "reason": "兼容已有身份提供商类型，仅键名保留"
+    },
+    {
+      "file": "apps/web/src/components/settings/OidcTab.tsx",
+      "text": "emptyForm('authentik')",
+      "count": 1,
+      "reason": "兼容已有身份提供商类型"
+    },
+    {
+      "file": "packages/db/src/repos/oidc.ts",
+      "text": "isOidcEnabled('authentik')",
+      "count": 1,
+      "reason": "兼容已有身份提供商类型"
+    }
+  ]
+}

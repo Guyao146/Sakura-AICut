@@ -25,6 +25,25 @@ export class HttpError extends Error {
   }
 }
 
+/** URL 里可能带有 api key / token（如 ?key=xxx），打日志/落库前用它脱敏 */
+export function redactUrl(url: string): string {
+  const SENSITIVE_PARAMS = ['key', 'api_key', 'apikey', 'token', 'access_token', 'secret', 'signature', 'x-api-key'];
+  try {
+    const parsed = new URL(url, 'http://placeholder.local');
+    let changed = false;
+    for (const [name, value] of parsed.searchParams) {
+      if (SENSITIVE_PARAMS.includes(name.toLowerCase()) && value) {
+        parsed.searchParams.set(name, '***');
+        changed = true;
+      }
+    }
+    return changed ? parsed.toString().replace('http://placeholder.local', '') : url;
+  } catch {
+    // 不是合法 URL，检查 query 形式的 key=...
+    return url.replace(/([?&](?:api_?key|token|access_token|secret|signature)=)[^&\s]*/gi, '$1***');
+  }
+}
+
 export function sleep(ms: number, signal?: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
@@ -69,7 +88,7 @@ export async function fetchJson<T = unknown>(
 
       if (!res.ok) {
         const err = new HttpError(
-          `HTTP ${res.status} ${res.statusText} @ ${url}${text ? ` :: ${text.slice(0, 500)}` : ''}`,
+          `HTTP ${res.status} ${res.statusText} @ ${redactUrl(url)}${text ? ` :: ${text.slice(0, 500)}` : ''}`,
           res.status,
           url,
           safeJson(text),
@@ -127,7 +146,7 @@ export async function pollUntil<T>(
 }
 
 /**
- * 读取 SSE 流（OpenAI 兼容的 stream=true）
+ * 读取 SSE 流（兼容接口的 stream=true）
  */
 export async function readSseLines(
   response: Response,
@@ -161,7 +180,7 @@ export async function downloadToBuffer(
   options: RequestOptions = {},
 ): Promise<{ buffer: Uint8Array; contentType: string }> {
   const res = await fetch(url, { signal: withTimeout(options.signal, options.timeoutMs ?? 300_000) });
-  if (!res.ok) throw new HttpError(`下载失败 HTTP ${res.status}`, res.status, url);
+  if (!res.ok) throw new HttpError(`下载失败 HTTP ${res.status} @ ${redactUrl(url)}`, res.status, url);
   const arrayBuffer = await res.arrayBuffer();
   return {
     buffer: new Uint8Array(arrayBuffer),

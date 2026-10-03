@@ -9,7 +9,7 @@ import type {
   ProviderProtocol,
 } from '@sakura/core';
 import { createId, extractTemplateVariables } from '@sakura/core';
-import { decryptJson, encryptJson } from '@sakura/core/server';
+import { decryptJson, decryptWithSecret, encryptJson } from '@sakura/core/server';
 import { buildUpdate, getDb, intToBool, nowIso, parseJson, toJson } from '../client';
 
 /**
@@ -34,13 +34,52 @@ interface ProviderRow {
   updated_at: string;
 }
 
+/**
+ * 早期版本的公开默认密钥。升级到持久化随机密钥后，用它们解老库的凭证；
+ * 解开后立刻用当前密钥重新写回。这里保留的是已知不可避免的公开值。
+ */
+const LEGACY_SECRETS = [
+  'sakura-aicut-dev-secret-do-not-use-in-production',
+  'sakura-aicut-change-me-please-32chars',
+];
+
+/**
+ * 读取并按需迁移供应商凭证。
+ *
+ * 早期版本没有持久化随机密钥，未配置 SAKURA_SECRET 时凭证是用源码/默认配置里的
+ * 公开常量加密的（等同于明文）。这里在读的时候探测：用当前密钥解不开就依次试
+ * 历史公开密钥，解开了立刻用新密钥重新写回，老库无痛升级。
+ */
+function loadCredentials(row: ProviderRow): ProviderCredentials {
+  const cipher = row.credentials_enc;
+  if (!cipher) return {};
+  const current = decryptJson<ProviderCredentials>(cipher);
+  if (current !== null || !row.id) return current ?? {};
+
+  for (const secret of LEGACY_SECRETS) {
+    const legacy = decryptWithSecret<ProviderCredentials>(cipher, secret);
+    if (legacy === null) continue;
+    try {
+      getDb()
+        .prepare('UPDATE providers SET credentials_enc = ?, updated_at = ? WHERE id = ?')
+        .run(encryptJson(legacy), nowIso(), row.id);
+      console.warn(`[sakura] 供应商「${row.name}」的凭证已从旧版默认密钥迁移到持久化随机密钥`);
+    } catch (error) {
+      // 落库失败不影响本次返回：内存里已经是明文，可用
+      console.error('[sakura] 凭证迁移落库失败：', error);
+    }
+    return legacy;
+  }
+  return {};
+}
+
 function mapProvider(row: ProviderRow): ProviderConfig {
   return {
     id: row.id,
     name: row.name,
     protocol: row.protocol as ProviderProtocol,
     baseUrl: row.base_url,
-    credentials: decryptJson<ProviderCredentials>(row.credentials_enc) ?? {},
+    credentials: loadCredentials(row),
     extraHeaders: parseJson<Record<string, string> | undefined>(row.extra_headers_json, undefined),
     proxyUrl: row.proxy_url,
     enabled: intToBool(row.enabled),

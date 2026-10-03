@@ -269,7 +269,7 @@ body {
   animation: dot-blink 1.2s ease-in-out infinite;
 }
 
-/* 画布节点生成中（RunningHub「节点即计算」式反馈）：边框流动微光 */
+/* 画布节点生成中（「节点即计算」式反馈）：边框流动微光 */
 .node-generating {
   position: relative;
 }

@@ -54,7 +54,7 @@ export interface MediaFile extends Timestamps {
 }
 
 /**
- * 无限画布上的素材项（RunningHub / LibTV 式自由画布）
+ * 无限画布上的素材项（自由画布）
  *
  * 与五步流程无关：这里是素材的二维空间编排。
  * 用户可以把文字、图片、视频、语音任意拖放到画布上，自由缩放与排列。
@@ -76,7 +76,7 @@ export const CANVAS_ITEM_KIND_LABELS: Record<CanvasItemKind, string> = {
 export const DEFAULT_NODE_SIZE = { width: 320, height: 180 } as const;
 
 /**
- * 画布节点的「角色」：对齐小云雀资产创作画布
+ * 画布节点的「角色」
  * - text/image/video/audio 为基础节点
  * - character/scene/prop 为资产节点：富含结构化字段，可被分镜故事板自动调用
  */
@@ -130,6 +130,31 @@ export interface CanvasItem extends Timestamps {
   /** 抽卡记录：历史生成结果折叠展示，当前展示项为 mediaId */
   variants?: CanvasItemVariant[];
 }
+
+/** 所有节点共用的文字驱动 AI 操作；生成时保持节点类型。 */
+export interface CanvasAiInput {
+  operation: 'optimize' | 'generate';
+  instruction?: string;
+  /** 当前编辑框内容，可包含尚未保存的修改。 */
+  sourceText?: string;
+  aspectRatio?: string;
+  durationSec?: number;
+  voice?: string;
+}
+
+/** 入队时的输入及内容快照，用于重试和防止覆盖后续编辑。 */
+export interface CanvasAiSnapshot extends CanvasAiInput {
+  itemId: ID;
+  kind: CanvasItemKind;
+  role: CanvasNodeRole;
+  refId: ID | null;
+  sourceText: string;
+  instruction: string;
+  expectedText: string;
+  expectedMediaId: ID | null;
+  expectedUrl: string | null;
+}
+
 
 /** 画布连线（表达素材间的叙事顺序 / 引用关系） */
 export interface CanvasEdge extends Timestamps {

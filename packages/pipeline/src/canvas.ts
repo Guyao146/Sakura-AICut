@@ -11,7 +11,7 @@ import { runImage } from './ai';
 import { saveMedia } from './storage';
 
 /**
- * 画布节点的媒体生成（RunningHub 式"节点即计算"）
+ * 画布节点的媒体生成（「节点即计算」）
  *
  * 选中画布上的文字 / 素材节点，直接以节点文本为提示词生成图片，
  * 生成结果会回填到该节点（kind 升级为 image）。
@@ -97,10 +97,11 @@ export async function generateCanvasItemImage(
 /** 为画布节点批量生成图片（文字 → 图片） */
 export async function generateCanvasItemsImage(
   canvasItemIds: string[],
-  options: { aspectRatio?: string } = {},
+  options: { aspectRatio?: string; isCanceled?: () => boolean } = {},
 ): Promise<Array<{ itemId: string; ok: boolean; error?: string }>> {
   const results: Array<{ itemId: string; ok: boolean; error?: string }> = [];
   for (const itemId of canvasItemIds) {
+    if (options.isCanceled?.()) break;
     try {
       await generateCanvasItemImage(itemId, options);
       results.push({ itemId, ok: true });
@@ -266,6 +267,7 @@ export function selectCanvasItemVariant(itemId: string, mediaId: string): Canvas
   const updated = updateCanvasItem(itemId, {
     mediaId: target.mediaId,
     url: target.url,
+    text: target.prompt ?? item.text,
     variants: rest,
   });
   return updated;

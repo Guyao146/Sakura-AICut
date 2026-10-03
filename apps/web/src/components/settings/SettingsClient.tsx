@@ -3,11 +3,12 @@
 import { useState } from 'react';
 import clsx from 'clsx';
 import type { AppSettings } from '@sakura/db';
+import type { OidcProviderKind } from '@sakura/db';
 import type { Capability, ModelEntry, ProviderProtocol } from '@sakura/core';
-import { CameraTab, GeneralTab, ModelsTab, PromptsTab, ProvidersTab } from './SettingsTabs';
+import { CameraTab, GeneralTab, ModelsTab, OidcTab, PromptsTab, ProvidersTab } from './SettingsTabs';
 
 /**
- * 设置区：API 接入 / 模型路由 / 提示词库 / 运镜库 / 通用设置
+ * 设置区：API 接入 / 模型路由 / 提示词库 / 运镜库 / 第三方登录 / 通用设置
  */
 
 export interface SettingsData {
@@ -23,6 +24,17 @@ export interface SettingsData {
   routes: Array<{ capability: Capability; providerId: string; modelId: string }>;
   prompts: Array<{ id: string; source: string; name: string; category: string; description: string; template: string; useCount: number }>;
   cameraMoves: Array<{ id: string; name: string; category: string; prompt: string; description: string }>;
+  oidcProviders: Array<{
+    id: string;
+    name: string;
+    kind: OidcProviderKind;
+    issuer: string;
+    clientId: string;
+    hasSecret: boolean;
+    scope: string;
+    enabled: boolean;
+    label: string;
+  }>;
   settings: AppSettings;
   initialTab: string;
 }
@@ -32,6 +44,7 @@ const TABS = [
   { key: 'models', label: '模型路由' },
   { key: 'prompts', label: '提示词库' },
   { key: 'camera', label: '运镜库' },
+  { key: 'oidc', label: '第三方登录' },
   { key: 'general', label: '通用设置' },
 ];
 
@@ -39,7 +52,7 @@ export function SettingsClient({ data }: { data: SettingsData }) {
   const [tab, setTab] = useState(data.initialTab);
   return (
     <div className="p-6">
-      <div className="mb-4 flex gap-1.5">
+      <div className="mb-4 flex flex-wrap gap-1.5">
         {TABS.map((item) => (
           <button
             key={item.key}
@@ -59,6 +72,7 @@ export function SettingsClient({ data }: { data: SettingsData }) {
       {tab === 'models' && <ModelsTab data={data} />}
       {tab === 'prompts' && <PromptsTab data={data} />}
       {tab === 'camera' && <CameraTab data={data} />}
+      {tab === 'oidc' && <OidcTab data={data} />}
       {tab === 'general' && <GeneralTab data={data} />}
     </div>
   );

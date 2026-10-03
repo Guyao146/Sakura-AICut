@@ -14,12 +14,12 @@ import type {
 import { contextOptions, normalizeBaseUrl } from '../utils';
 
 /**
- * Google Gemini 适配器（Generative Language API）
+ * 多模态内容接口适配器（Generative Language API）
  * - 文本 / 多模态：POST /v1beta/models/{model}:generateContent
- * - 图片（Gemini Image / Nano Banana）：同一接口，返回 inlineData 的 base64
- * - 视频（Veo）：POST /v1beta/models/{model}:predictLongRunning → 轮询 operation
+ * - 图片（多模态图片）：同一接口，返回 inlineData 的 base64
+ * - 视频（长任务接口）：POST /v1beta/models/{model}:predictLongRunning → 轮询 operation
  */
-function geminiHeaders(ctx: AdapterContext): Record<string, string> {
+function contentHeaders(ctx: AdapterContext): Record<string, string> {
   return {
     'Content-Type': 'application/json',
     'x-goog-api-key': ctx.credentials.apiKey ?? '',
@@ -27,35 +27,35 @@ function geminiHeaders(ctx: AdapterContext): Record<string, string> {
   };
 }
 
-function geminiUrl(ctx: AdapterContext, path: string): string {
+function contentUrl(ctx: AdapterContext, path: string): string {
   return `${normalizeBaseUrl(ctx.baseUrl)}/v1beta/${path}`;
 }
 
-interface GeminiPart {
+interface ContentPart {
   text?: string;
   inlineData?: { mimeType?: string; data?: string };
   inline_data?: { mime_type?: string; data?: string };
 }
 
-interface GeminiResponse {
-  candidates?: Array<{ content?: { parts?: GeminiPart[] }; finishReason?: string }>;
+interface ContentResponse {
+  candidates?: Array<{ content?: { parts?: ContentPart[] }; finishReason?: string }>;
   usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number; totalTokenCount?: number };
   error?: { message?: string; status?: string };
 }
 
-function uriToInlinePart(uri: string): GeminiPart | null {
+function uriToInlinePart(uri: string): ContentPart | null {
   const match = uri.match(/^data:([^;]+);base64,(.+)$/);
   if (!match) return null;
   return { inlineData: { mimeType: match[1], data: match[2] } };
 }
 
-function collectText(payload: GeminiResponse): string {
+function collectText(payload: ContentResponse): string {
   return (payload.candidates?.[0]?.content?.parts ?? []).map((part) => part.text ?? '').join('');
 }
 
-export const geminiAdapter: ProviderAdapter = {
+export const contentGenerationAdapter: ProviderAdapter = {
   protocol: 'gemini',
-  label: 'Google Gemini',
+  label: '多模态内容接口',
 
   async chat(ctx: AdapterContext, req: TextGenerateRequest): Promise<TextGenerateResult> {
     const systemMessages = req.messages
@@ -67,16 +67,16 @@ export const geminiAdapter: ProviderAdapter = {
       .map((m) => ({
         role: m.role === 'assistant' ? 'model' : 'user',
         parts: [
-          ...(m.images ?? []).map(uriToInlinePart).filter((p): p is GeminiPart => p !== null),
+          ...(m.images ?? []).map(uriToInlinePart).filter((p): p is ContentPart => p !== null),
           { text: m.content },
         ],
       }));
 
-    const payload = await fetchJson<GeminiResponse>(
-      geminiUrl(ctx, `models/${req.model}:generateContent`),
+    const payload = await fetchJson<ContentResponse>(
+      contentUrl(ctx, `models/${req.model}:generateContent`),
       {
         method: 'POST',
-        headers: geminiHeaders(ctx),
+        headers: contentHeaders(ctx),
         body: JSON.stringify({
           contents,
           ...(systemMessages ? { systemInstruction: { parts: [{ text: systemMessages }] } } : {}),
@@ -90,7 +90,7 @@ export const geminiAdapter: ProviderAdapter = {
       },
       contextOptions(ctx),
     );
-    if (payload?.error) throw new Error(`Gemini 请求失败：${payload.error.message}`);
+    if (payload?.error) throw new Error(`多模态内容接口 请求失败：${payload.error.message}`);
 
     return {
       text: collectText(payload),
@@ -107,16 +107,16 @@ export const geminiAdapter: ProviderAdapter = {
   },
 
   async image(ctx: AdapterContext, req: ImageGenerateRequest): Promise<ImageGenerateResult> {
-    const parts: GeminiPart[] = [{ text: req.prompt }];
+    const parts: ContentPart[] = [{ text: req.prompt }];
     for (const ref of req.referenceImages ?? []) {
       const part = uriToInlinePart(ref);
       if (part) parts.push(part);
     }
-    const payload = await fetchJson<GeminiResponse>(
-      geminiUrl(ctx, `models/${req.model}:generateContent`),
+    const payload = await fetchJson<ContentResponse>(
+      contentUrl(ctx, `models/${req.model}:generateContent`),
       {
         method: 'POST',
-        headers: geminiHeaders(ctx),
+        headers: contentHeaders(ctx),
         body: JSON.stringify({
           contents: [{ role: 'user', parts }],
           generationConfig: { responseModalities: ['IMAGE'], ...(req.params ?? {}) },
@@ -124,7 +124,7 @@ export const geminiAdapter: ProviderAdapter = {
       },
       contextOptions(ctx, Math.max(ctx.timeoutSec, 300) * 1000),
     );
-    if (payload?.error) throw new Error(`Gemini 图片生成失败：${payload.error.message}`);
+    if (payload?.error) throw new Error(`多模态内容接口 图片生成失败：${payload.error.message}`);
 
     const images = (payload.candidates?.[0]?.content?.parts ?? [])
       .map((part) => {
@@ -146,10 +146,10 @@ export const geminiAdapter: ProviderAdapter = {
       if (match) instance.image = { bytesBase64Encoded: match[2], mimeType: match[1] };
     }
     const payload = await fetchJson<{ name?: string; error?: { message?: string } }>(
-      geminiUrl(ctx, `models/${req.model}:predictLongRunning`),
+      contentUrl(ctx, `models/${req.model}:predictLongRunning`),
       {
         method: 'POST',
-        headers: geminiHeaders(ctx),
+        headers: contentHeaders(ctx),
         body: JSON.stringify({
           instances: [instance],
           parameters: {
@@ -164,7 +164,7 @@ export const geminiAdapter: ProviderAdapter = {
       contextOptions(ctx),
     );
     const taskId = payload?.name;
-    if (!taskId) throw new Error(`Veo 视频任务提交失败：${JSON.stringify(payload).slice(0, 300)}`);
+    if (!taskId) throw new Error(`长任务接口 视频任务提交失败：${JSON.stringify(payload).slice(0, 300)}`);
     return { taskId, raw: payload };
   },
 
@@ -176,7 +176,7 @@ export const geminiAdapter: ProviderAdapter = {
         generateVideoResponse?: { generatedSamples?: Array<{ video?: { uri?: string } }> };
         generatedVideos?: Array<{ video?: { uri?: string } }>;
       };
-    }>(geminiUrl(ctx, taskId.replace(/^\/?v1beta\//, '')), { headers: geminiHeaders(ctx) }, contextOptions(ctx));
+    }>(contentUrl(ctx, taskId.replace(/^\/?v1beta\//, '')), { headers: contentHeaders(ctx) }, contextOptions(ctx));
 
     if (payload?.error) return { status: 'failed', error: payload.error.message, raw: payload };
     if (!payload?.done) return { status: 'running', rawStatus: 'running', raw: payload };
@@ -184,8 +184,8 @@ export const geminiAdapter: ProviderAdapter = {
     const samples =
       payload.response?.generateVideoResponse?.generatedSamples ?? payload.response?.generatedVideos ?? [];
     const uri = samples[0]?.video?.uri;
-    if (!uri) return { status: 'failed', error: 'Veo 未返回视频地址', raw: payload };
-    // 下载 Veo 产物需要附带 API Key
+    if (!uri) return { status: 'failed', error: '长任务接口 未返回视频地址', raw: payload };
+    // 下载生成产物需要附带 API Key
     return {
       status: 'succeeded',
       videoUrl: uri.includes('key=') ? uri : `${uri}${uri.includes('?') ? '&' : '?'}key=${ctx.credentials.apiKey ?? ''}`,
@@ -197,11 +197,11 @@ export const geminiAdapter: ProviderAdapter = {
   async probe(ctx: AdapterContext): Promise<ProbeResult> {
     const started = Date.now();
     try {
-      const payload = await fetchJson<GeminiResponse>(
-        geminiUrl(ctx, 'models/gemini-2.5-flash:generateContent'),
+      const payload = await fetchJson<ContentResponse>(
+        contentUrl(ctx, 'models/gemini-2.5-flash:generateContent'),
         {
           method: 'POST',
-          headers: geminiHeaders(ctx),
+          headers: contentHeaders(ctx),
           body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: 'ping' }] }] }),
         },
         { ...contextOptions(ctx, 30_000), retries: 0 },

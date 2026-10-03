@@ -1,0 +1,46 @@
+# =============================================================================
+# 构建上下文瘦身
+# =============================================================================
+# 依赖与构建产物：builder 阶段会重新 pnpm install / next build，
+# 宿主机上的 node_modules 与 .next 不需要（也不应该）进入镜像。
+**/node_modules
+**/.next
+**/.turbo
+**/dist
+**/build
+
+# 运行时数据卷：镜像里绝不能出现本地 SQLite 库与媒体文件
+/data
+data
+
+# 运行时密钥和环境配置不得进入构建上下文
+**/.env
+**/.env.*
+**/.sakura_secret
+.tmp-check
+
+# 版本控制 / CI / IDE 元数据
+.git
+.gitignore
+.github
+.vscode
+.idea
+.editorconfig
+
+# 日志与系统垃圾
+**/*.log
+.DS_Store
+Thumbs.db
+npm-debug.log*
+pnpm-debug.log*
+
+# 测试文件不进镜像（应用代码不引用它们）
+**/*.test.ts
+**/*.test.tsx
+**/*.test.mjs
+
+# 顶层文档与脚本（Dockerfile 不引用）
+/scripts
+/docs
+/*.md
+LICENSE

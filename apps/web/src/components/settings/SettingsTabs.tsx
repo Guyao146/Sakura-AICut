@@ -23,6 +23,7 @@ import {
   saveModelRouteAction,
   saveProviderAction,
 } from '@/app/actions/settings';
+import { changePasswordAction } from '@/app/actions/auth';
 import { createCameraMoveAction, deleteCameraMoveAction } from '@/app/actions/production';
 import { deletePromptTemplateAction, savePromptTemplateAction } from '@/app/actions/prompts';
 import type { AppSettings } from '@sakura/db';
@@ -119,7 +120,7 @@ export function ModelsTab({ data }: { data: SettingsData }) {
         })}
       </div>
       <div className="mt-3 text-[11px] leading-relaxed text-slate-500">
-        提示：视频模型（可灵 / Seedance / 海螺 / 万相 / Sora）多为异步任务，系统会自动轮询；某供应商不支持的能力会被自动跳过并回退到其它供应商。
+        提示：视频生成通常为异步任务，系统会自动轮询；某供应商不支持的能力会被自动跳过并回退到其它供应商。
       </div>
     </Card>
   );
@@ -134,86 +135,173 @@ export function GeneralTab({ data }: { data: SettingsData }) {
   const [settings, setSettings] = useState<AppSettings>(data.settings);
 
   return (
-    <Card title="通用设置">
-      <div className="grid gap-3 lg:grid-cols-2">
-        <Field label="默认画幅">
-          <Select
-            value={settings.defaultAspectRatio}
-            onChange={(event) => setSettings({ ...settings, defaultAspectRatio: event.target.value })}
+    <div className="space-y-4">
+      <Card title="账户与登录">
+        <div className="mb-3 text-[12px] text-slate-400">
+          单用户本地账户，密码以 scrypt 哈希存储。修改密码后需重新登录。
+        </div>
+        <ChangePasswordForm />
+      </Card>
+
+      <Card title="通用设置">
+        <div className="grid gap-3 lg:grid-cols-2">
+          <Field label="默认画幅">
+            <Select
+              value={settings.defaultAspectRatio}
+              onChange={(event) => setSettings({ ...settings, defaultAspectRatio: event.target.value })}
+            >
+              {['9:16', '16:9', '1:1', '4:3', '3:4', '21:9'].map((value) => (
+                <option key={value} value={value}>
+                  {value}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="默认目标时长（秒）">
+            <Input
+              type="number"
+              value={settings.defaultTargetDurationSec}
+              onChange={(event) => setSettings({ ...settings, defaultTargetDurationSec: Number(event.target.value) })}
+            />
+          </Field>
+          <Field label="并发生成数量" hint="图片生成的并发上限">
+            <Input
+              type="number"
+              min={1}
+              max={8}
+              value={settings.generationConcurrency}
+              onChange={(event) => setSettings({ ...settings, generationConcurrency: Number(event.target.value) })}
+            />
+          </Field>
+          <Field label="ffmpeg 路径" hint="Docker 镜像内即为 ffmpeg">
+            <Input
+              value={settings.ffmpegPath}
+              onChange={(event) => setSettings({ ...settings, ffmpegPath: event.target.value })}
+            />
+          </Field>
+        </div>
+        <label className="mb-2 flex items-center gap-2 text-[12px] text-slate-400">
+          <input
+            type="checkbox"
+            checked={settings.videoUseFirstFrame}
+            onChange={(event) => setSettings({ ...settings, videoUseFirstFrame: event.target.checked })}
+          />
+          视频生成默认先生成首帧图（一致性更稳，成本更高）
+        </label>
+        <label className="mb-2 flex items-center gap-2 text-[12px] text-slate-400">
+          <input
+            type="checkbox"
+            checked={settings.agentAutoApprove}
+            onChange={(event) => setSettings({ ...settings, agentAutoApprove: event.target.checked })}
+          />
+          Agent 默认全自动执行（不逐步确认）
+        </label>
+        <label className="mb-3 flex items-center gap-2 text-[12px] text-slate-400">
+          <input
+            type="checkbox"
+            checked={settings.keepRawResponse}
+            onChange={(event) => setSettings({ ...settings, keepRawResponse: event.target.checked })}
+          />
+          保留供应商原始响应（调试用，占用更多存储）
+        </label>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="primary"
+            loading={busy}
+            onClick={async () => {
+              setBusy(true);
+              await saveAppSettingsAction(settings);
+              setSaved(true);
+              router.refresh();
+              setBusy(false);
+            }}
           >
-            {['9:16', '16:9', '1:1', '4:3', '3:4', '21:9'].map((value) => (
-              <option key={value} value={value}>
-                {value}
-              </option>
-            ))}
-          </Select>
-        </Field>
-        <Field label="默认目标时长（秒）">
-          <Input
-            type="number"
-            value={settings.defaultTargetDurationSec}
-            onChange={(event) => setSettings({ ...settings, defaultTargetDurationSec: Number(event.target.value) })}
-          />
-        </Field>
-        <Field label="并发生成数量" hint="图片生成的并发上限">
-          <Input
-            type="number"
-            min={1}
-            max={8}
-            value={settings.generationConcurrency}
-            onChange={(event) => setSettings({ ...settings, generationConcurrency: Number(event.target.value) })}
-          />
-        </Field>
-        <Field label="ffmpeg 路径" hint="Docker 镜像内即为 ffmpeg">
-          <Input
-            value={settings.ffmpegPath}
-            onChange={(event) => setSettings({ ...settings, ffmpegPath: event.target.value })}
-          />
-        </Field>
-      </div>
-      <label className="mb-2 flex items-center gap-2 text-[12px] text-slate-400">
-        <input
-          type="checkbox"
-          checked={settings.videoUseFirstFrame}
-          onChange={(event) => setSettings({ ...settings, videoUseFirstFrame: event.target.checked })}
-        />
-        视频生成默认先生成首帧图（一致性更稳，成本更高）
-      </label>
-      <label className="mb-2 flex items-center gap-2 text-[12px] text-slate-400">
-        <input
-          type="checkbox"
-          checked={settings.agentAutoApprove}
-          onChange={(event) => setSettings({ ...settings, agentAutoApprove: event.target.checked })}
-        />
-        Agent 默认全自动执行（不逐步确认）
-      </label>
-      <label className="mb-3 flex items-center gap-2 text-[12px] text-slate-400">
-        <input
-          type="checkbox"
-          checked={settings.keepRawResponse}
-          onChange={(event) => setSettings({ ...settings, keepRawResponse: event.target.checked })}
-        />
-        保留供应商原始响应（调试用，占用更多存储）
-      </label>
-      <div className="flex items-center gap-2">
-        <Button
-          variant="primary"
-          loading={busy}
-          onClick={async () => {
-            setBusy(true);
-            await saveAppSettingsAction(settings);
-            setSaved(true);
-            router.refresh();
-            setBusy(false);
-          }}
-        >
-          保存设置
-        </Button>
-        {saved ? <span className="text-[11px] text-emerald-300">已保存</span> : null}
-      </div>
-    </Card>
+            保存设置
+          </Button>
+          {saved ? <span className="text-[11px] text-emerald-300">已保存</span> : null}
+        </div>
+      </Card>
+    </div>
   );
 }
+
+/** 修改管理员密码：需校验旧密码 */
+function ChangePasswordForm() {
+  const [oldPassword, setOldPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirm, setConfirm] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<{ tone: 'ok' | 'err'; text: string } | null>(null);
+
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (busy) return;
+    if (newPassword !== confirm) {
+      setMessage({ tone: 'err', text: '两次输入的新密码不一致' });
+      return;
+    }
+    setBusy(true);
+    setMessage(null);
+    try {
+      const result = await changePasswordAction(oldPassword, newPassword);
+      setMessage(
+        result.ok
+          ? { tone: 'ok', text: '密码已更新，其他设备的会话已失效，请重新登录' }
+          : { tone: 'err', text: result.error ?? '修改失败' },
+      );
+      if (result.ok) {
+        setOldPassword('');
+        setNewPassword('');
+        setConfirm('');
+      }
+    } catch (cause) {
+      setMessage({ tone: 'err', text: cause instanceof Error ? cause.message : '网络错误' });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <form onSubmit={submit} className="grid gap-3 lg:grid-cols-3">
+      <Field label="当前密码">
+        <Input
+          type="password"
+          autoComplete="current-password"
+          value={oldPassword}
+          onChange={(event) => setOldPassword(event.target.value)}
+        />
+      </Field>
+      <Field label="新密码" hint="至少 8 位">
+        <Input
+          type="password"
+          autoComplete="new-password"
+          value={newPassword}
+          onChange={(event) => setNewPassword(event.target.value)}
+        />
+      </Field>
+      <Field label="确认新密码">
+        <Input
+          type="password"
+          autoComplete="new-password"
+          value={confirm}
+          onChange={(event) => setConfirm(event.target.value)}
+        />
+      </Field>
+      <div className="flex items-center gap-2 lg:col-span-3">
+        <Button variant="default" type="submit" loading={busy}>
+          更新密码
+        </Button>
+        {message ? (
+          <span className={`text-[11px] ${message.tone === 'ok' ? 'text-emerald-300' : 'text-red-300'}`}>
+            {message.text}
+          </span>
+        ) : null}
+      </div>
+    </form>
+  );
+}
+
+export { OidcTab } from './OidcTab';
 
 export function CameraTab({ data }: { data: SettingsData }) {
   const router = useRouter();
@@ -418,7 +506,7 @@ export function PromptsTab({ data }: { data: SettingsData }) {
 export function ProvidersTab({ data }: { data: SettingsData }) {
   const router = useRouter();
   const [presetKey, setPresetKey] = useState('');
-  const [modelsText, setModelsText] = useState('gpt-4o:text\ngpt-image-1:image\nsora-2:video');
+  const [modelsText, setModelsText] = useState('');
   const [busy, setBusy] = useState(false);
   const [probe, setProbe] = useState<Record<string, string>>({});
   const [balance, setBalance] = useState<Record<string, string>>({});
@@ -480,7 +568,7 @@ export function ProvidersTab({ data }: { data: SettingsData }) {
     <div className="grid gap-4 lg:grid-cols-[1fr_420px]">
       <div className="space-y-3">
         {data.providers.length === 0 ? (
-          <Empty text="还没有接入模型供应商。右侧选择预设（NewAPI / OneAPI / 火山引擎 …）一键填入地址与模型。" />
+          <Empty text="还没有接入模型服务。请在右侧选择协议模板，并填写接口地址与实际模型 ID。" />
         ) : (
           data.providers.map((provider) => (
             <ProviderCardView
@@ -669,7 +757,7 @@ function ProviderFormView({
 }) {
   return (
     <Card title={form.id ? '编辑供应商' : '添加供应商'}>
-      <Field label="从预设快速添加">
+      <Field label="从协议模板添加">
         <Select value={presetKey} onChange={(event) => applyPreset(event.target.value)}>
           <option value="">请选择…</option>
           {PROVIDER_PRESETS.map((preset) => (
@@ -701,10 +789,10 @@ function ProviderFormView({
         <Input type="password" value={form.apiKey} onChange={(event) => setForm({ ...form, apiKey: event.target.value })} />
       </Field>
       <div className="grid grid-cols-2 gap-2">
-        <Field label="AccessKey（可灵）">
+        <Field label="AccessKey（签名鉴权）">
           <Input value={form.accessKey} onChange={(event) => setForm({ ...form, accessKey: event.target.value })} />
         </Field>
-        <Field label="SecretKey（可灵）">
+        <Field label="SecretKey（签名鉴权）">
           <Input
             type="password"
             value={form.secretKey}
@@ -712,7 +800,7 @@ function ProviderFormView({
           />
         </Field>
       </div>
-      <Field label="GroupId（MiniMax 可选）">
+      <Field label="GroupId（按接口要求填写）">
         <Input value={form.groupId} onChange={(event) => setForm({ ...form, groupId: event.target.value })} />
       </Field>
       <Field label="模型列表" hint="每行一个：模型ID:能力（text/image/video/audio）">

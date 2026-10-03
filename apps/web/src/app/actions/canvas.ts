@@ -21,11 +21,13 @@ import {
   addItemToGroup,
   removeItemFromGroup,
   mapItemGroups,
+  getJob,
+  listJobs,
 } from '@sakura/db';
-import type { CanvasItem, CanvasEdge, CanvasGroup, CanvasItemKind } from '@sakura/core';
-import { CANVAS_TEMPLATES, DEFAULT_NODE_SIZE } from '@sakura/core';
+import type { CanvasAiInput, CanvasAiSnapshot, CanvasItem, CanvasEdge, CanvasGroup, CanvasItemKind, Job } from '@sakura/core';
+import { CANVAS_TEMPLATES, DEFAULT_NODE_SIZE, getCanvasRetryIds, getCanvasNodeJobStates } from '@sakura/core';
 import type { ActionResult } from './project';
-import { enqueueCanvasGenerate } from '@/lib/server/jobs';
+import { enqueueCanvasAi, enqueueCanvasGenerate } from '@/lib/server/jobs';
 
 /**
  * 无限画布素材相关 Server Actions
@@ -378,12 +380,43 @@ export async function generateCanvasItemsAction(
   projectId: string,
   itemIds: string[],
   options: { aspectRatio?: string } = {},
-): Promise<ActionResult<{ jobId: string; count: number }>> {
+): Promise<ActionResult<{ jobId: string; count: number; job: Job }>> {
   try {
-    if (itemIds.length === 0) throw new Error('请先选择要生成的节点');
     const job = enqueueCanvasGenerate({ projectId, canvasItemIds: itemIds, aspectRatio: options.aspectRatio });
     refresh(projectId);
-    return { ok: true, data: { jobId: job.id, count: itemIds.length } };
+    return { ok: true, data: { jobId: job.id, count: new Set(itemIds).size, job } };
+  } catch (error) {
+    return toError(error);
+  }
+}
+
+export async function canvasAiAction(
+  projectId: string, itemId: string, input: CanvasAiInput,
+): Promise<ActionResult<{ job: Job; item: CanvasItem }>> {
+  try {
+    const job = enqueueCanvasAi(projectId, itemId, input);
+    refresh(projectId);
+    return { ok: true, data: { job, item: getCanvasItem(itemId)! } };
+  } catch (error) {
+    return toError(error);
+  }
+}
+
+
+/** 从任务结果重试失败/取消的节点，保留原画幅，不重复消耗已完成节点的额度。 */
+export async function retryCanvasJobAction(projectId: string, jobId: string): Promise<ActionResult<{ job: Job; count: number }>> {
+  try {
+    const previous = getJob(jobId);
+    if (!previous || previous.projectId !== projectId) throw new Error('任务不存在');
+    const latest = getCanvasNodeJobStates(listJobs({ projectId, limit: -1 }), projectId);
+    const ids = getCanvasRetryIds(previous).filter((id) => latest.get(id)?.jobId === previous.id);
+    if (!ids.length) throw new Error('没有可重试的节点，或这些节点已经重新提交');
+    const payload = previous.payload as { aspectRatio?: string; ai?: CanvasAiSnapshot };
+    const job = payload.ai
+      ? enqueueCanvasAi(projectId, ids[0]!, payload.ai, payload.ai)
+      : enqueueCanvasGenerate({ projectId, canvasItemIds: ids, aspectRatio: payload.aspectRatio });
+    refresh(projectId);
+    return { ok: true, data: { job, count: ids.length } };
   } catch (error) {
     return toError(error);
   }

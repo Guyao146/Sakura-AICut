@@ -9,9 +9,12 @@ export type { RouteResolution } from './ai/router';
 
 export {
   decryptJson,
+  decryptJsonLegacy,
+  decryptWithSecret,
   encryptJson,
   maskSecret,
   safeCompare,
+  setEncryptionSecretResolver,
 } from './utils/crypto';
 
 export {
@@ -20,6 +23,7 @@ export {
   HttpError,
   pollUntil,
   readSseLines,
+  redactUrl,
   safeJson,
   sleep,
 } from './utils/http';

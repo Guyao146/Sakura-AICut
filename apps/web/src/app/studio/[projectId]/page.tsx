@@ -2,13 +2,14 @@ import { builtinCameraMoves, computeProgress } from '@sakura/core';
 import { notFound } from 'next/navigation';
 import {
   bootstrap,
-  getActivePlan,
   getProjectWithContent,
   listChatMessages,
   listCustomCameraMoves,
   listMedia,
   listPromptTemplates,
   listTurns,
+  listJobs,
+  listPlans,
   loadContent,
   touchProject,
   listCanvasItems,
@@ -50,14 +51,20 @@ export default async function StudioPage({ params }: { params: Promise<{ project
   const cameraMoves = [...builtinCameraMoves(), ...listCustomCameraMoves(projectId)];
   const snapshot = getProjectWithContent(projectId);
   const progress = computeProgress(snapshot);
-  const plan = getActivePlan(projectId);
+  const plan = listPlans(projectId, 1)[0] ?? null;
+  const jobs = [...new Map([
+    ...listJobs({ projectId, limit: 40 }),
+    ...listJobs({ projectId, status: ['pending', 'queued', 'running'], limit: -1 }),
+  ].map((job) => [job.id, job])).values()];
   const planTurns = plan ? listTurns(plan.id, 100) : [];
   const routes = connectedRoutesSummary();
 
   return (
     <StudioClient
+      key={projectId}
       data={{
         project: content.project,
+        jobs,
         screenplay: content.screenplay,
         screenplayVersions,
         assets: content.assets,

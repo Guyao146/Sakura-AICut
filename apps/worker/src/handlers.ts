@@ -1,5 +1,5 @@
-import type { Job } from '@sakura/core';
-import { getAppSettings, getAsset, getShot, listAssets, listShots } from '@sakura/db';
+import type { CanvasAiSnapshot, Job } from '@sakura/core';
+import { getAppSettings, getAsset, getCanvasItem, getShot, listAssets, listShots, updateJob, updateShot } from '@sakura/db';
 import {
   checkShotVideo,
   failShotVideo,
@@ -9,6 +9,9 @@ import {
   generateShotFirstFrame,
   probeProvider,
   renderTimeline,
+  reviewProjectClips,
+  runCanvasAi,
+  type CanvasAiExecutionOptions,
   runText,
   submitShotVideo,
 } from '@sakura/pipeline';
@@ -84,7 +87,7 @@ const handleAssetPrepare: Handler = async ({ job, progress, log, isCanceled }) =
 };
 
 /** 生成单个镜头片段：提交异步任务并轮询到结束 */
-const handleVideoGenerate: Handler = async ({ job, progress, log }) => {
+const handleVideoGenerate: Handler = async ({ job, progress, log, isCanceled }) => {
   const {
     shotId,
     withFirstFrame,
@@ -100,11 +103,26 @@ const handleVideoGenerate: Handler = async ({ job, progress, log }) => {
   };
   const shot = getShot(shotId);
   if (!shot) throw new Error(`镜头不存在：${shotId}`);
+  const release = () => {
+    const current = getShot(shotId);
+    if (current && current.status === 'running') {
+      updateShot(shotId, { status: current.clipMediaIds.length > 0 ? 'succeeded' : 'pending', error: null });
+    }
+  };
+
+  if (isCanceled()) {
+    release();
+    return { canceled: true, shotId };
+  }
 
   if (withFirstFrame !== false && !shot.firstFrameMediaId) {
     progress(5, '正在生成首帧图');
     log(`镜头 #${shot.index}：先生成首帧图以保持角色一致性`);
     await generateShotFirstFrame(shotId);
+    if (isCanceled()) {
+      release();
+      return { canceled: true, shotId };
+    }
   }
 
   progress(20, '正在提交视频任务');
@@ -122,6 +140,12 @@ const handleVideoGenerate: Handler = async ({ job, progress, log }) => {
 
   for (;;) {
     if (Date.now() - startedAt > timeoutMs) throw new Error('视频任务超时（可通过 ASYNC_TASK_TIMEOUT 调大）');
+    // 取消后不再轮询：释放并发槽位给其它任务。供应商侧已提交的任务无法撤回，
+    // 之后仍可能完成并计费，因此把镜头回退到可重试的状态而不是标记失败。
+    if (isCanceled()) {
+      release();
+      return { canceled: true, shotId, providerTaskId: taskId };
+    }
     const state = await checkShotVideo(providerId, taskId);
 
     if (state.status === 'succeeded' && state.videoUrl) {
@@ -170,18 +194,31 @@ const handleShotBatch: Handler = async (ctx) => {
   if (targets.length === 0) return { total: 0, succeeded: 0, failed: 0, results: [] };
 
   const results: Array<{ shotId: string; ok: boolean; error?: string }> = [];
+  const previous = (Array.isArray(job.result?.results) ? job.result.results : []) as Array<{
+    shotId?: string; ok?: boolean;
+  }>;
+  const succeededIds = new Set(previous
+    .filter((entry) => entry.ok === true && typeof entry.shotId === 'string' && targets.some((shot) => shot.id === entry.shotId))
+    .map((entry) => entry.shotId as string));
+  const snapshot = () => ({ total: targets.length, succeeded: results.filter((item) => item.ok).length,
+    failed: results.filter((item) => !item.ok).length, results: [...results] });
   let done = 0;
 
   for (const shot of targets) {
     if (isCanceled()) break;
+    if (succeededIds.has(shot.id)) continue;
     try {
-      await handleVideoGenerate({
+      const outcome = await handleVideoGenerate({
         job: { ...job, payload: { shotId: shot.id, withFirstFrame } },
         progress: (percent, stage) =>
           progress(Math.round(((done + percent / 100) / targets.length) * 100), stage ?? `镜头 #${shot.index}`),
         log,
         isCanceled,
       });
+      if (outcome.canceled) {
+        updateJob(job.id, { result: snapshot() });
+        break;
+      }
       results.push({ shotId: shot.id, ok: true });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -189,12 +226,12 @@ const handleShotBatch: Handler = async (ctx) => {
       log(`镜头 #${shot.index} 失败：${message}`, 'warn');
       failShotVideo(shot.id, message);
     }
+    updateJob(job.id, { result: snapshot() });
     done += 1;
     progress(Math.round((done / targets.length) * 100), `已完成 ${done}/${targets.length} 个镜头`);
   }
 
-  const succeeded = results.filter((item) => item.ok).length;
-  return { total: targets.length, succeeded, failed: results.length - succeeded, results };
+  return snapshot();
 };
 
 /** 时间线渲染导出 */
@@ -241,29 +278,91 @@ const handleProviderProbe: Handler = async ({ job }) => {
   return { ...(await probeProvider(providerId)) };
 };
 
-/** 画布节点直接生成图片（文字 → 图片，生成结果回填到节点） */
+/** 成片 QA：ffprobe 探针 + 视觉评审，自动标记坏片段 */
+const handleQaReview: Handler = async ({ job, progress, log, isCanceled }) => {
+  const { shotIndexes, withVision, autoFlag, refresh } = job.payload as {
+    shotIndexes?: number[];
+    withVision?: boolean;
+    autoFlag?: boolean;
+    refresh?: boolean;
+  };
+  const projectId = job.projectId as string;
+  const settings = getAppSettings();
+  const summary = await reviewProjectClips(projectId, {
+    shotIndexes,
+    withVision: withVision ?? true,
+    autoFlag: autoFlag ?? true,
+    refresh: refresh ?? false,
+    ffmpegPath: settings.ffmpegPath,
+    source: 'auto',
+    onProgress: (percent, stage) => progress(percent, stage),
+    log: (message, level) => log(message, level),
+    isCanceled,
+  });
+  return {
+    total: summary.total,
+    passed: summary.passed,
+    warned: summary.warned,
+    failed: summary.failed,
+    skipped: summary.skipped,
+    reshootIndexes: summary.reshootIndexes,
+    reports: summary.reports.map((report) => ({
+      id: report.id,
+      shotId: report.shotId,
+      mediaId: report.mediaId,
+      verdict: report.verdict,
+      score: report.review?.score ?? null,
+      issues: report.issues.slice(0, 3),
+    })),
+  };
+};
+
+/** 逐节点持久化状态：前端能识别当前节点、批次部分失败，以及取消前已完成的产物。 */
 const handleCanvasGenerate: Handler = async ({ job, progress, log, isCanceled }) => {
-  const { canvasItemIds, aspectRatio } = job.payload as { canvasItemIds: string[]; aspectRatio?: string };
-  const ids = canvasItemIds ?? [];
+  const { canvasItemIds, aspectRatio, ai } = job.payload as {
+    canvasItemIds: string[]; aspectRatio?: string; ai?: CanvasAiSnapshot;
+  };
+  let videoTask = job.result?.videoTask as CanvasAiExecutionOptions['videoTask'];
+  const ids = [...new Set(canvasItemIds ?? [])];
   if (ids.length === 0) throw new Error('没有需要生成的画布素材');
-  const results: Array<{ itemId: string; ok: boolean; error?: string }> = [];
-  let done = 0;
+  // 僵尸任务重新领取时，已经成功的节点不重复生图。
+  const previous = Array.isArray(job.result?.results) ? job.result.results : [];
+  const results: Array<{ itemId: string; ok: boolean; error?: string }> = previous
+    .filter((entry) => entry?.ok === true && ids.includes(entry.itemId));
+  const completed = new Set(results.map((entry) => entry.itemId));
+  const snapshot = (currentItemId: string | null) => ({
+    total: ids.length, succeeded: results.filter((entry) => entry.ok).length,
+    failed: results.filter((entry) => !entry.ok).length, results: [...results], currentItemId, videoTask,
+  });
   for (const itemId of ids) {
     if (isCanceled()) break;
+    if (completed.has(itemId)) continue;
+    const item = getCanvasItem(itemId);
+    updateJob(job.id, { result: snapshot(itemId) });
+    progress(Math.round((results.length / ids.length) * 100), `正在生成「${item?.text.slice(0, 24) || itemId}」`);
     try {
-      await generateCanvasItemImage(itemId, { aspectRatio });
+      if (!item || item.projectId !== job.projectId) throw new Error('节点不存在或不属于当前项目');
+      if (ai) {
+        if (ai.itemId !== itemId) throw new Error('AI 任务节点不匹配');
+        await runCanvasAi(ai, { isCanceled, videoTask, onVideoSubmitted: (task) => {
+          videoTask = task;
+          updateJob(job.id, { remoteTaskId: task.taskId, result: snapshot(itemId) });
+        } });
+      } else {
+        await generateCanvasItemImage(itemId, { aspectRatio });
+      }
       results.push({ itemId, ok: true });
       log(`画布素材 ${itemId} 生成完成`);
     } catch (error) {
+      if (ai && isCanceled()) break;
       const message = error instanceof Error ? error.message : String(error);
       results.push({ itemId, ok: false, error: message });
       log(`画布素材 ${itemId} 生成失败：${message}`, 'warn');
     }
-    done += 1;
-    progress(Math.round((done / ids.length) * 100), `已完成 ${done}/${ids.length} 个画布素材`);
+    updateJob(job.id, { result: snapshot(null) });
+    progress(Math.round((results.length / ids.length) * 100), `已处理 ${results.length}/${ids.length} 个画布素材`);
   }
-  const succeeded = results.filter((r) => r.ok).length;
-  return { total: ids.length, succeeded, failed: results.length - succeeded, results };
+  return snapshot(null);
 };
 
 export const HANDLERS: Record<string, Handler> = {
@@ -276,4 +375,5 @@ export const HANDLERS: Record<string, Handler> = {
   'agent.run': handleAgentRun,
   'text.generate': handleTextGenerate,
   'provider.probe': handleProviderProbe,
+  'qa.review': handleQaReview,
 };

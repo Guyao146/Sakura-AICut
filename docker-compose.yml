@@ -20,7 +20,9 @@ services:
       - '${WEB_PORT:-3000}:3000'
     environment:
       SAKURA_DATA_DIR: /data
-      SAKURA_SECRET: ${SAKURA_SECRET:-sakura-aicut-change-me-please-32chars}
+      # 供应商凭证加密密钥。留空时会自动使用数据目录内的持久化随机密钥（安全默认）；
+      # 多实例共享同一份数据卷时必须显式设置为同一个值。
+      SAKURA_SECRET: ${SAKURA_SECRET:-}
       APP_URL: ${APP_URL:-http://localhost:3000}
       FFMPEG_PATH: ffmpeg
       NODE_ENV: production
@@ -36,12 +38,13 @@ services:
     pull_policy: missing
     environment:
       SAKURA_DATA_DIR: /data
-      SAKURA_SECRET: ${SAKURA_SECRET:-sakura-aicut-change-me-please-32chars}
+      # 与 web 共享同一数据卷，凭证密钥须保持一致；留空时使用数据目录内的持久化随机密钥
+      SAKURA_SECRET: ${SAKURA_SECRET:-}
       WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-3}
       WORKER_POLL_INTERVAL: ${WORKER_POLL_INTERVAL:-1500}
       ASYNC_TASK_TIMEOUT: ${ASYNC_TASK_TIMEOUT:-1800}
       FFMPEG_PATH: ffmpeg
-      # 如需使用宿主机上的 Ollama / ComfyUI，保持以下映射（Linux 下用 host-gateway）
+      # 如需使用宿主机上的模型服务，保持以下映射（Linux 下用 host-gateway）
       EXTRA_HOST: host.docker.internal
     volumes:
       - sakura-data:/data
