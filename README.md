@@ -1,6 +1,6 @@
 # Sakura AI Cut
 
-> 无限画布式 AI 短剧 / 电影生成与在线剪辑平台 · Docker 一键部署 · [LGPL-2.1](#-许可证)
+> 无限画布式 AI 短剧 / 电影生成与在线剪辑平台 · Docker 一键部署 · [Sakura-License-1.2](#-许可证)
 
 一个把「AI 剧本 → 资产生成 → 分镜运镜 → 在线剪辑」串成一条流水线的自部署应用。
 所有能力按**五步工作台**组织，全程在一张无限画布上推进；内置自动规划 Agent，可以端到端替你跑完整条链路。
@@ -85,18 +85,21 @@ pnpm dev             # 同时启动 web(3000) 与 worker
 
 ## 🔒 许可证
 
-本项目采用 **GNU Lesser General Public License v2.1**（[LGPL-2.1](./LICENSE)）。
+本项目采用 **Sakura-License v1.2**（固定文本标识 `Sakura-License-1.2`）。完整正文见 [LICENSE](./LICENSE)，采用声明（项目、许可人、适用范围与首次适用提交）见 [NOTICE.md](./NOTICE.md)。
 
-- 你可以自由使用、修改、分发本作品（包括商业用途）；
-- 对本项目的**修改**必须以 LGPL-2.1 开源；
-- 通过动态链接 / 独立模块方式调用本项目，你的程序可以不受 LGPL 约束。
+- 它是**源码可用（source-available）**许可证，限制特定商业利用，不是 OSI 批准的开源许可证；
+- 阅读、运行、复制、修改、分发与自部署免许可费；但**面向第三方的商业利用（销售、订阅、付费 SaaS、收费托管 / 部署 / 定制 / 支持等）须先取得书面商业授权**；
+- 对外分发或提供受覆盖作品时，须保留署名、许可证与来源信息，并**同步公开对应源码**；
+- 通过公开 API / HTTP 等协议独立调用本项目的运行实例，不因此构成商用或触发共享义务；
+- 历史授权保留：在本仓库此前 LGPL-2.1 下取得副本者，可继续按该许可使用（见 [NOTICE.md](./NOTICE.md)）。
+
+商用授权请在 [Issues](https://github.com/Guyao146/Sakura-AICut/issues) 发起申请（请勿在公开 Issue 中提交敏感资料）。
 
 ```
 Sakura AI Cut - 无限画布 AI 短剧生成与剪辑平台
 Copyright (C) 2026 Guyao146
 
-This library is free software; you can redistribute it and/or
-modify it under the terms of the GNU Lesser General Public
-License as published by the Free Software Foundation; either
-version 2.1 of the License, or (at your option) any later version.
+Licensed under Sakura-License v1.2 (Sakura-License-1.2). Certain
+commercial uses require prior written authorization. See ./LICENSE
+and ./NOTICE.md.
 ```
