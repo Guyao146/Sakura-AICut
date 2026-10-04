@@ -17,6 +17,9 @@ const nextConfig: NextConfig = {
     '/**': ['../../packages/db/package.json'],
   },
   images: { unoptimized: true },
+  // 本机以 127.0.0.1（或局域网 IP）访问 dev 服务器时，Next 默认按跨域拦截 HMR 等开发资源，
+  // 会卡住 Turbopack 的客户端水合（页面可渲染但完全无交互）。这里放行本机回环 origin。
+  allowedDevOrigins: ['127.0.0.1', 'localhost'],
   typescript: { ignoreBuildErrors: false },
   experimental: {
     // 上传接口放宽请求体大小
