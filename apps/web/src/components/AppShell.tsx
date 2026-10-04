@@ -3,53 +3,49 @@ import type { ReactNode } from 'react';
 import { LogoutButton } from './LogoutButton';
 
 /**
- * 应用外壳：左侧主导航
+ * 应用外壳：顶部看板磁贴式主导航（项目空间 / 全局设置）
  */
 const NAV = [
-  { href: '/', label: '项目空间', icon: '▦' },
-  { href: '/settings', label: '全局设置', icon: '⚙' },
+  { href: '/', label: '项目空间', icon: '▦', desc: '项目库 · 五步工作台入口' },
+  { href: '/settings', label: '全局设置', icon: '⚙', desc: '接入 · 模型路由 · 偏好' },
 ];
 
 export function AppShell({ children, active }: { children: ReactNode; active?: string }) {
   return (
-    <div className="app-shell min-h-dvh md:flex">
+    <div className="app-shell min-h-dvh">
       <a href="#page-content" className="skip-link">跳到主要内容</a>
-      <aside className="app-sidebar border-b border-ink-600 bg-[#0e1116] px-4 py-3 md:sticky md:top-0 md:flex md:h-dvh md:w-48 md:shrink-0 md:flex-col md:border-r md:border-b-0 md:px-3 md:py-6 xl:w-56">
-        <div className="flex items-center justify-between gap-3 md:block">
-          <Link href="/" className="flex items-center gap-2.5 rounded-lg md:mb-8 md:px-2">
+      <header className="app-topbar sticky top-0 z-40 border-b border-ink-600 bg-ink-900/90 backdrop-blur">
+        <div className="mx-auto flex w-full max-w-[1600px] flex-wrap items-center gap-3 px-4 py-3 sm:px-6 lg:px-8">
+          <Link href="/" className="flex shrink-0 items-center gap-2.5 rounded-lg">
             <span className="brand-mark flex size-9 shrink-0 items-center justify-center rounded-xl bg-sakura-500/10 text-lg" aria-hidden="true">🌸</span>
             <span className="text-sm font-semibold tracking-wide text-slate-100">Sakura AI Cut</span>
           </Link>
-          <div className="md:hidden"><LogoutButton /></div>
+          <nav aria-label="主导航" className="flex min-w-0 flex-1 flex-wrap gap-2">
+            {NAV.map((item) => {
+              const isActive =
+                (item.href === '/' && (active === 'projects' || !active)) ||
+                (item.href === '/settings' && active === 'settings');
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  aria-current={isActive ? 'page' : undefined}
+                  className={`nav-link kanban-tile flex min-w-0 flex-1 items-center gap-3 rounded-xl border px-3.5 py-2.5 ${
+                    isActive ? 'border-sakura-500/30 bg-sakura-500/10 text-pink-200' : 'border-ink-600 bg-ink-800/60 text-slate-300 hover:border-pink-400/30 hover:bg-white/5 hover:text-slate-100'
+                  }`}
+                >
+                  <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-white/5 text-base" aria-hidden="true">{item.icon}</span>
+                  <span className="min-w-0">
+                    <span className="block truncate text-[13px] font-medium">{item.label}</span>
+                    <span className="mt-0.5 block truncate text-[10px] text-slate-500">{item.desc}</span>
+                  </span>
+                </Link>
+              );
+            })}
+          </nav>
+          <div className="ml-auto w-full sm:w-auto md:shrink-0"><LogoutButton /></div>
         </div>
-        <nav aria-label="主导航" className="mt-4 flex gap-1.5 md:mt-0 md:flex-1 md:flex-col">
-          {NAV.map((item) => {
-            const isActive =
-              (item.href === '/' && (active === 'projects' || !active)) ||
-              (item.href === '/settings' && active === 'settings');
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                aria-current={isActive ? 'page' : undefined}
-                className={`nav-link flex flex-1 items-center gap-2.5 rounded-xl px-3 py-2.5 text-[13px] transition-colors md:flex-none ${
-                  isActive ? 'bg-sakura-500/10 text-pink-200 ring-1 ring-inset ring-sakura-500/20' : 'text-slate-400 hover:bg-white/5 hover:text-slate-200'
-                }`}
-              >
-                <span>{item.icon}</span>
-                {item.label}
-              </Link>
-            );
-          })}
-        </nav>
-        <div className="hidden md:block">
-          <div className="mb-4 rounded-xl border border-ink-600 bg-ink-800 p-3 text-[11px] leading-6 text-slate-400">
-            <p className="mb-1 font-medium text-slate-200">从灵感到成片</p>
-            设定 → 剧本 → 资产<br />分镜 → 剪辑
-          </div>
-          <LogoutButton />
-        </div>
-      </aside>
+      </header>
       <main id="page-content" tabIndex={-1} className="min-w-0 flex-1">{children}</main>
     </div>
   );

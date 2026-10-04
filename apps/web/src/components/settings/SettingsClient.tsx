@@ -5,10 +5,10 @@ import clsx from 'clsx';
 import type { AppSettings } from '@sakura/db';
 import type { OidcProviderKind } from '@sakura/db';
 import type { Capability, ModelEntry, ProviderProtocol } from '@sakura/core';
-import { CameraTab, GeneralTab, ModelsTab, OidcTab, PromptsTab, ProvidersTab } from './SettingsTabs';
+import { AboutTab, CameraTab, GeneralTab, ModelsTab, OidcTab, PromptsTab, ProvidersTab } from './SettingsTabs';
 
 /**
- * 设置区：API 接入 / 模型路由 / 提示词库 / 运镜库 / 第三方登录 / 通用设置
+ * 设置区：API 接入 / 模型路由 / 提示词库 / 运镜库 / 第三方登录 / 通用设置 / 关于我们
  */
 
 export interface SettingsData {
@@ -46,6 +46,7 @@ const TABS = [
   { key: 'camera', label: '运镜库' },
   { key: 'oidc', label: '第三方登录' },
   { key: 'general', label: '通用设置' },
+  { key: 'about', label: '关于我们' },
 ];
 
 export function SettingsClient({ data }: { data: SettingsData }) {
@@ -77,6 +78,7 @@ export function SettingsClient({ data }: { data: SettingsData }) {
         {tab === 'camera' && <CameraTab data={data} />}
         {tab === 'oidc' && <OidcTab data={data} />}
         {tab === 'general' && <GeneralTab data={data} />}
+        {tab === 'about' && <AboutTab />}
       </section>
     </div>
   );

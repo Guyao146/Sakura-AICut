@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
+  APP_VERSION,
   CAPABILITY_LABELS,
   PROMPT_CATEGORY_LABELS,
   PROTOCOL_LABELS,
@@ -818,6 +819,74 @@ function ProviderFormView({
         ) : null}
       </div>
     </Card>
+  );
+}
+
+/* ============================ 关于我们 ============================ */
+
+const REPO_URL = 'https://github.com/Guyao146/Sakura-AICut';
+
+export function AboutTab() {
+  return (
+    <div className="space-y-4">
+      <Card
+        title={
+          <span className="flex items-center gap-2">
+            <span className="flex size-7 items-center justify-center rounded-lg bg-sakura-500/10 text-pink-300" aria-hidden="true">🌸</span>
+            关于 Sakura AI Cut
+          </span>
+        }
+      >
+        <div className="space-y-3 text-xs leading-6 text-slate-400">
+          <p>
+            无限画布式 AI 短剧 / 电影生成与在线剪辑平台：把「剧本 → 资产生成 → 分镜运镜 → 在线剪辑」串成一条流水线，
+            所有能力按五步工作台组织，内置自动规划 Agent。数据落在本机 SQLite，模型能力由你配置的外部 API 提供。
+          </p>
+          <dl className="grid gap-3 sm:grid-cols-2">
+            <div className="rounded-lg border border-ink-600 bg-ink-800/50 p-3">
+              <dt className="text-[11px] text-slate-500">当前版本</dt>
+              <dd className="mt-1 text-sm font-medium text-slate-200">v{APP_VERSION}</dd>
+            </div>
+            <div className="rounded-lg border border-ink-600 bg-ink-800/50 p-3">
+              <dt className="text-[11px] text-slate-500">部署方式</dt>
+              <dd className="mt-1 text-sm font-medium text-slate-200">Docker 一键部署 · 数据本地存储</dd>
+            </div>
+            <div className="rounded-lg border border-ink-600 bg-ink-800/50 p-3">
+              <dt className="text-[11px] text-slate-500">创作流程</dt>
+              <dd className="mt-1 text-sm font-medium text-slate-200">设定 → 剧本 → 资产 → 分镜 → 剪辑</dd>
+            </div>
+            <div className="rounded-lg border border-ink-600 bg-ink-800/50 p-3">
+              <dt className="text-[11px] text-slate-500">模型能力</dt>
+              <dd className="mt-1 text-sm font-medium text-slate-200">自定义 API 接入 · 按能力路由</dd>
+            </div>
+          </dl>
+        </div>
+      </Card>
+
+      <Card title="许可证与授权">
+        <div className="space-y-3 text-xs leading-6 text-slate-400">
+          <p>
+            本项目采用 <span className="font-medium text-slate-200">Sakura-License v1.2</span>（固定文本标识 <code className="rounded bg-ink-800 px-1 py-0.5 text-[11px] text-pink-200">Sakura-License-1.2</code>）。
+            它是源码可用（source-available）许可证，不是 OSI 批准的开源许可证：阅读、运行、复制、修改与自部署免许可费，
+            面向第三方的商业利用须先取得书面授权。
+          </p>
+          <ul className="list-disc space-y-1.5 pl-4">
+            <li>许可正文与采用声明见仓库根目录 <a className="text-pink-300 hover:text-pink-200" href={`${REPO_URL}/blob/main/LICENSE`}>LICENSE</a> 与 <a className="text-pink-300 hover:text-pink-200" href={`${REPO_URL}/blob/main/NOTICE.md`}>NOTICE.md</a>；</li>
+            <li>此前以 LGPL-2.1 取得副本的接收者，可继续按该许可使用；</li>
+            <li>商用授权请在仓库 Issues 发起申请（请勿在公开 Issue 中提交敏感资料）。</li>
+          </ul>
+        </div>
+      </Card>
+
+      <Card title="资源与链接">
+        <div className="flex flex-wrap gap-2">
+          <a className="ui-button ui-button-primary rounded-lg bg-pink-500 px-4 py-2 text-xs font-medium text-white" href={REPO_URL}>源码仓库</a>
+          <a className="ui-button rounded-lg border border-ink-600 px-4 py-2 text-xs text-slate-300" href="https://wiki.mcylyr.cn/#/../licenses/Sakura-License-1.2">许可证正文（Wiki）</a>
+          <a className="ui-button rounded-lg border border-ink-600 px-4 py-2 text-xs text-slate-300" href={`${REPO_URL}/issues`}>问题与授权申请</a>
+        </div>
+        <p className="mt-3 text-[11px] leading-5 text-slate-500">自部署、单用户使用；生成内容依赖你配置的外部模型服务。</p>
+      </Card>
+    </div>
   );
 }
 
