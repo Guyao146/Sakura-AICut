@@ -5,6 +5,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { DEFAULT_BRIEF, type Project } from '@sakura/core';
 import { filterProjects, ProjectLibrary } from './ProjectLibrary';
 import { AppShell } from './AppShell';
+import { HomeKanban } from './HomeKanban';
 import { WorkflowNav } from './studio/WorkflowNav';
 import { Button } from './ui';
 
@@ -66,15 +67,26 @@ test('项目卡片错峰入场延迟有上限，装饰不进入辅助技术名�
   assert.equal((html.match(/data-stage="brief"/g) ?? []).length, 12);
 });
 
-test('应用外壳看板磁贴平铺，当前页磁贴只有一项 aria-current', () => {
-  const html = renderToStaticMarkup(createElement(AppShell, { active: 'settings', children: createElement('div', null, '页面内容') }));
-  assert.match(html, /aria-label="主导航"/);
+test('应用外壳为极简顶栏：左上角 logo 与注销，不含主导航磁贴', () => {
+  const html = renderToStaticMarkup(createElement(AppShell, { children: createElement('div', null, '页面内容') }));
   assert.match(html, /跳到主要内容/);
   assert.match(html, /href="\/"/);
+  assert.match(html, /Sakura AI Cut/);
+  assert.match(html, /注销登录/);
+  assert.doesNotMatch(html, /aria-label="主导航"/);
+  assert.doesNotMatch(html, /kanban-tile/);
+  assert.equal((html.match(/aria-current="page"/g) ?? []).length, 0);
+});
+
+test('首页看板磁贴承载主导航：项目空间锚定项目库，全局设置跳转设置页', () => {
+  const html = renderToStaticMarkup(createElement(HomeKanban, { projectCount: 3 }));
+  assert.match(html, /aria-label="看板导航"/);
+  assert.match(html, /href="#project-library"/);
   assert.match(html, /href="\/settings"/);
   assert.match(html, /项目空间/);
   assert.match(html, /全局设置/);
-  assert.equal((html.match(/aria-current="page"/g) ?? []).length, 1);
+  assert.match(html, /3 个项目/);
+  assert.equal((html.match(/<a /g) ?? []).length, 2);
 });
 
 test('主按钮保留加载和禁用语义，视觉样式不影响其它变体', () => {

@@ -21,7 +21,7 @@ export default async function SettingsPage({
   const summary = connectedRoutesSummary();
 
   return (
-    <AppShell active="settings">
+    <AppShell>
       <PageHeader
         title="设置"
         subtitle="接入自定义模型服务、配置能力路由、管理提示词与运镜模板"

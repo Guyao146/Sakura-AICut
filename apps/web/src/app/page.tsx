@@ -1,10 +1,11 @@
 import { bootstrap, listProjects } from '@sakura/db';
 import { AppShell, PageHeader } from '@/components/AppShell';
+import { HomeKanban } from '@/components/HomeKanban';
 import { NewProjectForm } from '@/components/NewProjectForm';
 import { ProjectLibrary } from '@/components/ProjectLibrary';
 
 /**
- * 首页：项目列表 + 新建项目
+ * 首页：看板磁贴（主导航）+ 项目列表 + 新建项目
  */
 export const dynamic = 'force-dynamic';
 
@@ -13,7 +14,7 @@ export default function HomePage() {
   const projects = listProjects();
 
   return (
-    <AppShell active="projects">
+    <AppShell>
       <PageHeader title="项目空间" subtitle="把灵感留在这里，随时回来继续创作。"
         extra={<a href="#new-project" className="ui-button ui-button-primary rounded-lg bg-pink-500 px-4 py-2 text-xs font-medium text-white">＋ 新建项目</a>} />
       <div className="mx-auto w-full max-w-[1600px] space-y-6 p-4 sm:p-6 lg:p-8">
@@ -36,9 +37,10 @@ export default function HomePage() {
             <div className="border-l border-white/10 pl-7"><dt>已完成</dt><dd className="mt-2 text-3xl font-semibold tabular-nums text-pink-200">{projects.filter((project) => project.status === 'completed').length}</dd></div>
           </dl>
         </section>
+        <HomeKanban projectCount={projects.length} />
         <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_340px] 2xl:grid-cols-[minmax(0,1fr)_360px]">
           <ProjectLibrary projects={projects} />
-          <section id="new-project" aria-label="新建项目" className="motion-enter min-w-0 scroll-mt-6" style={{ animationDelay: '140ms' }}>
+          <section id="new-project" aria-label="新建项目" className="motion-enter min-w-0 scroll-mt-24" style={{ animationDelay: '140ms' }}>
             <NewProjectForm />
             <p className="mt-3 px-1 text-xs leading-5 text-slate-500">生成前，请在全局设置中接入模型服务并配置能力路由。</p>
           </section>

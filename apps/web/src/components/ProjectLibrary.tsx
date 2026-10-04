@@ -23,7 +23,7 @@ export function ProjectLibrary({ projects }: { projects: Project[] }) {
   const [filter, setFilter] = useState<ProjectFilter>('all');
   const visible = useMemo(() => filterProjects(projects, query, filter), [projects, query, filter]);
   return (
-    <section aria-labelledby="project-library-title" className="project-library min-w-0 space-y-4">
+    <section id="project-library" aria-labelledby="project-library-title" className="project-library min-w-0 scroll-mt-24 space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 id="project-library-title" className="text-sm font-semibold text-slate-200">项目库 <span className="ml-1 font-normal text-slate-500">{projects.length}</span></h2>
         <Input type="search" aria-label="搜索项目" placeholder="搜索名称、故事或题材…" value={query}
