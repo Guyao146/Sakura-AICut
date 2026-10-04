@@ -49,31 +49,35 @@ const TABS = [
 ];
 
 export function SettingsClient({ data }: { data: SettingsData }) {
-  const [tab, setTab] = useState(data.initialTab);
+  const [tab, setTab] = useState(TABS.some((item) => item.key === data.initialTab) ? data.initialTab : 'providers');
   return (
-    <div className="p-6">
-      <div className="mb-4 flex flex-wrap gap-1.5">
+    <div className="mx-auto grid w-full max-w-[1600px] items-start gap-6 p-4 sm:p-6 lg:p-8 xl:grid-cols-[168px_minmax(0,1fr)]">
+      <nav aria-label="设置分类" className="surface-card flex min-w-0 gap-1.5 overflow-x-auto rounded-xl border border-ink-600 bg-ink-800 p-2 xl:sticky xl:top-6 xl:flex-col">
         {TABS.map((item) => (
           <button
             key={item.key}
             type="button"
             onClick={() => setTab(item.key)}
+            aria-pressed={tab === item.key}
+            aria-controls="settings-content"
             className={clsx(
-              'rounded-lg border px-3 py-1.5 text-[12px]',
-              tab === item.key ? 'border-pink-400/40 bg-pink-500/10 text-pink-200' : 'border-[#2b2436] text-slate-400',
+              'choice-chip shrink-0 rounded-lg border px-3 py-2.5 text-left text-xs',
+              tab === item.key ? 'border-pink-400/30 bg-pink-500/10 text-pink-200' : 'border-transparent text-slate-400 hover:bg-white/5',
             )}
           >
             {item.label}
           </button>
         ))}
-      </div>
+      </nav>
 
-      {tab === 'providers' && <ProvidersTab data={data} />}
-      {tab === 'models' && <ModelsTab data={data} />}
-      {tab === 'prompts' && <PromptsTab data={data} />}
-      {tab === 'camera' && <CameraTab data={data} />}
-      {tab === 'oidc' && <OidcTab data={data} />}
-      {tab === 'general' && <GeneralTab data={data} />}
+      <section key={tab} id="settings-content" aria-label={TABS.find((item) => item.key === tab)?.label} className="panel-enter min-w-0 space-y-4">
+        {tab === 'providers' && <ProvidersTab data={data} />}
+        {tab === 'models' && <ModelsTab data={data} />}
+        {tab === 'prompts' && <PromptsTab data={data} />}
+        {tab === 'camera' && <CameraTab data={data} />}
+        {tab === 'oidc' && <OidcTab data={data} />}
+        {tab === 'general' && <GeneralTab data={data} />}
+      </section>
     </div>
   );
 }

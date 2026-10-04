@@ -1382,7 +1382,7 @@ function CanvasInner({
         proOptions={{ hideAttribution: true }}
       >
         <Background gap={20} color="#1f252f" size={1} />
-        <Controls className="!bg-[#12151c] !text-slate-300" showInteractive={false} />
+        <Controls position="top-left" className="!bg-[#12151c] !text-slate-300" showInteractive={false} />
         <MiniMap
           className="!bg-[#12151c]"
           maskColor="rgba(10,12,18,0.7)"
@@ -1395,7 +1395,7 @@ function CanvasInner({
       {/* 画布工具栏（可拖动 dock，默认吸底居中） */}
       <div
         ref={dockRef}
-        className="glass-panel absolute bottom-3 left-1/2 z-20 flex -translate-x-1/2 flex-col gap-1.5 rounded-xl border border-[#333b4a] p-1.5 shadow-xl shadow-black/50"
+        className="canvas-dock glass-panel absolute bottom-3 left-1/2 z-20 flex -translate-x-1/2 flex-col gap-1.5 rounded-xl border border-[#333b4a] p-1.5 shadow-xl shadow-black/50"
         style={dockPos ? { left: dockPos.x, top: dockPos.y, right: 'auto', bottom: 'auto', transform: 'none' } : undefined}
       >
         <div

@@ -31,7 +31,8 @@ export function Button({
       {...rest}
       disabled={rest.disabled || loading}
       className={clsx(
-        'inline-flex items-center justify-center gap-1.5 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed',
+        'ui-button inline-flex items-center justify-center gap-1.5 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed',
+        variant === 'primary' && 'ui-button-primary',
         size === 'sm' ? 'px-2.5 py-1 text-xs' : 'px-3.5 py-1.5 text-[13px]',
         variants[variant],
         className,
@@ -73,7 +74,7 @@ export function Field({ label, hint, children }: { label: string; hint?: string;
 
 export function Card({ title, extra, children, className }: { title?: ReactNode; extra?: ReactNode; children: ReactNode; className?: string }) {
   return (
-    <div className={clsx('rounded-xl border border-[#242a36] bg-[#12151c] p-4', className)}>
+    <div className={clsx('surface-card rounded-xl border border-[#242a36] bg-[#12151c] p-4', className)}>
       {title ? (
         <div className="mb-3 flex items-center justify-between gap-2">
           <div className="text-sm font-medium text-slate-200">{title}</div>

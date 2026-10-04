@@ -1,8 +1,7 @@
-import Link from 'next/link';
 import { bootstrap, listProjects } from '@sakura/db';
 import { AppShell, PageHeader } from '@/components/AppShell';
 import { NewProjectForm } from '@/components/NewProjectForm';
-import { Badge } from '@/components/ui';
+import { ProjectLibrary } from '@/components/ProjectLibrary';
 
 /**
  * 首页：项目列表 + 新建项目
@@ -15,47 +14,35 @@ export default function HomePage() {
 
   return (
     <AppShell active="projects">
-      <PageHeader
-        title="我的项目"
-        subtitle="无限画布 · 五步生成 AI 短剧 / 电影：设定 → 剧本 → 资产 → 分镜 → 剪辑"
-        extra={<Badge tone="pink">{projects.length} 个项目</Badge>}
-      />
-      <div className="grid gap-4 p-6 lg:grid-cols-[1fr_380px]">
-        <div className="space-y-3">
-          {projects.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-[#2b3240] p-10 text-center text-sm text-slate-500">
-              还没有项目。右侧填写项目设定，创建你的第一部 AI 短剧。
+      <PageHeader title="项目空间" subtitle="把灵感留在这里，随时回来继续创作。"
+        extra={<a href="#new-project" className="ui-button ui-button-primary rounded-lg bg-pink-500 px-4 py-2 text-xs font-medium text-white">＋ 新建项目</a>} />
+      <div className="mx-auto w-full max-w-[1600px] space-y-6 p-4 sm:p-6 lg:p-8">
+        <section aria-label="创作概览" className="library-hero motion-enter flex flex-wrap items-center justify-between gap-6 rounded-2xl border border-sakura-500/20 p-5 sm:p-7">
+          <div className="hero-art" aria-hidden="true">
+            <span className="hero-orbit" />
+            <span className="hero-frame hero-frame-back" />
+            <span className="hero-frame hero-frame-front"><span>✦</span></span>
+          </div>
+          <div className="relative">
+            <p className="mb-3 flex items-center gap-2 text-[11px] font-medium tracking-widest text-pink-300"><span className="hero-spark" aria-hidden="true" />SAKURA · 创作工作室</p>
+            <h2 className="text-xl font-semibold tracking-tight text-slate-100 sm:text-2xl">让故事，一步步<span className="hero-title-accent">成为作品。</span></h2>
+            <p className="mt-3 max-w-lg text-xs leading-6 text-slate-300">设定方向，打磨剧本，在画布上组织资产与分镜，最后完成剪辑。</p>
+            <div className="mt-5 flex items-center gap-2 text-[10px] tracking-wider text-slate-400" aria-hidden="true">
+              <span className="text-pink-300">灵感</span><span className="hero-trail" /><span>画布</span><span className="hero-trail" /><span className="text-sky-200">成片</span>
             </div>
-          ) : (
-            projects.map((project) => (
-              <Link
-                key={project.id}
-                href={`/studio/${project.id}`}
-                className="block rounded-xl border border-[#242a36] bg-[#12151c] p-4 transition-colors hover:border-pink-400/40"
-              >
-                <div className="flex items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="truncate text-[14px] font-medium text-slate-100">{project.brief.name}</div>
-                    <div className="mt-1 truncate text-[11px] text-slate-500">
-                      {project.brief.genres.join(' / ') || '未选题材'} · {project.brief.style} ·{' '}
-                      {project.brief.aspectRatio} · 目标 {project.brief.targetDurationSec}s
-                    </div>
-                    {project.brief.logline ? (
-                      <div className="mt-1 truncate text-[11px] text-slate-600">{project.brief.logline}</div>
-                    ) : null}
-                  </div>
-                  <div className="flex shrink-0 items-center gap-2">
-                    <Badge tone={project.status === 'completed' ? 'green' : 'default'}>{project.stage}</Badge>
-                    <span className="text-[11px] text-slate-500">
-                      {new Date(project.updatedAt).toLocaleString('zh-CN', { hour12: false })}
-                    </span>
-                  </div>
-                </div>
-              </Link>
-            ))
-          )}
+          </div>
+          <dl className="hero-stats relative flex gap-7 rounded-xl border border-white/10 px-5 py-4 text-xs text-slate-300">
+            <div><dt>全部项目</dt><dd className="mt-2 text-3xl font-semibold tabular-nums text-slate-100">{projects.length}</dd></div>
+            <div className="border-l border-white/10 pl-7"><dt>已完成</dt><dd className="mt-2 text-3xl font-semibold tabular-nums text-pink-200">{projects.filter((project) => project.status === 'completed').length}</dd></div>
+          </dl>
+        </section>
+        <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_340px] 2xl:grid-cols-[minmax(0,1fr)_360px]">
+          <ProjectLibrary projects={projects} />
+          <section id="new-project" aria-label="新建项目" className="motion-enter min-w-0 scroll-mt-6" style={{ animationDelay: '140ms' }}>
+            <NewProjectForm />
+            <p className="mt-3 px-1 text-xs leading-5 text-slate-500">生成前，请在全局设置中接入模型服务并配置能力路由。</p>
+          </section>
         </div>
-        <NewProjectForm />
       </div>
     </AppShell>
   );

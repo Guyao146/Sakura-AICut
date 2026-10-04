@@ -70,7 +70,7 @@ export function CanvasInspector({
   const h = Math.round(item.height || 0);
 
   return (
-    <div className="pointer-events-auto absolute right-3 top-3 z-30 max-h-[calc(100%-1.5rem)] w-72 overflow-y-auto rounded-xl border border-[#333b4a] bg-[#12151c]/95 p-3 shadow-2xl backdrop-blur">
+    <div className="pointer-events-auto absolute right-3 top-3 z-30 max-h-[calc(100%-1.5rem)] w-72 max-w-[calc(100%-1.5rem)] overflow-y-auto rounded-xl border border-[#333b4a] bg-[#12151c]/95 p-3 shadow-2xl backdrop-blur">
       <div className="mb-2 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Badge tone={item.kind === 'text' ? 'default' : 'pink'}>{CANVAS_ITEM_KIND_LABELS[item.kind]}</Badge>

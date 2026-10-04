@@ -7,6 +7,7 @@ import clsx from 'clsx';
 import { APP_VERSION, hasJobFailures, isActiveJob } from '@sakura/core';
 import { Badge, Button, Progress } from '@/components/ui';
 import { TaskCenter } from './TaskCenter';
+import { WorkflowNav } from './WorkflowNav';
 import { useStudioJobs } from './use-studio-jobs';
 import { StepBriefPanel, StepScriptPanel } from './StudioPanels';
 import { StepAssetsPanel } from './ProductionPanels';
@@ -54,104 +55,79 @@ export default function StudioClient({ data }: { data: StudioData }) {
 
   const activeJobs = jobs.filter(isActiveJob);
   const failedCount = jobs.filter(hasJobFailures).length;
-  const openPanel = (next: typeof tab) => { setTab(next); setPanelCollapsed(false); };
+  const openPanel = (next: typeof tab) => {
+    setTab(next);
+    setPanelCollapsed(false);
+    // 窄屏面板位于画布下方，主动打开工具时将内容带入视野。
+    window.requestAnimationFrame(() => {
+      if (window.matchMedia('(max-width: 1023px)').matches) {
+        document.getElementById('studio-panel')?.scrollIntoView({ block: 'start' });
+      }
+    });
+  };
 
   // 只有资产生成 / 分镜片段两步需要无限画布；其余步骤显示独立页面
   const showCanvas = stage === 'assets' || stage === 'shots';
 
   return (
-    <div className="flex h-screen flex-col">
-      <header className="flex items-center justify-between gap-4 border-b border-[#1c2129] px-5 py-3">
-        <div className="flex min-w-0 items-center gap-3">
-          <Link href="/" className="text-[12px] text-slate-400 hover:text-slate-200">
-            ← 项目
-          </Link>
-          <Badge tone="pink">
-            v{APP_VERSION}
-          </Badge>
-          <div className="min-w-0">
-            <div className="truncate text-[14px] font-medium text-slate-100">{data.project.brief.name}</div>
-            <div className="truncate text-[11px] text-slate-500">
-              {data.project.brief.genres.join('/')} · {data.project.brief.style} · {data.project.brief.aspectRatio} ·{' '}
-              {data.project.brief.targetDurationSec}s
+    <div className="studio-shell bg-ink-900">
+      <header className="studio-header shrink-0 border-b border-ink-600">
+        <div className="flex flex-wrap items-center justify-between gap-3 px-3 py-3 sm:px-5">
+          <div className="flex min-w-0 flex-1 basis-full items-center gap-3 sm:basis-auto">
+            <Link href="/" className="shrink-0 rounded-lg border border-ink-600 px-2.5 py-2 text-xs text-slate-400 hover:text-slate-200">
+              ← 项目
+            </Link>
+            <Badge tone="pink">
+              v{APP_VERSION}
+            </Badge>
+            <div className="min-w-0">
+              <div className="truncate text-[14px] font-medium text-slate-100">{data.project.brief.name}</div>
+              <div className="truncate text-[11px] text-slate-500">
+                {data.project.brief.genres.join('/')} · {data.project.brief.style} · {data.project.brief.aspectRatio} ·{' '}
+                {data.project.brief.targetDurationSec}s
+              </div>
             </div>
-          </div>
 
-          {/* 五步流程：项目设定 / 剧本创作 / 资产生成 / 分镜片段 / 在线剪辑 */}
-          <div className="flex shrink-0 items-center gap-0.5 rounded-full border border-[#242a36] bg-[#0e1116] p-0.5">
-            {data.progress.map((item, idx) => (
-              <button
-                key={item.stage}
-                type="button"
-                onClick={() => {
-                  setStage(item.stage);
-                  setTab('step');
-                }}
-                className={clsx(
-                  'flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] transition-all duration-200',
-                  stage === item.stage && tab === 'step'
-                    ? 'bg-pink-500/15 text-pink-200 shadow-[inset_0_0_0_1px_rgba(244,114,182,0.35)]'
-                    : item.percent >= 100
-                      ? 'text-emerald-300/80 hover:bg-emerald-500/10'
-                      : 'text-slate-400 hover:bg-white/5 hover:text-slate-200',
-                )}
-                title={`${item.title} · ${item.stats} · ${item.percent}%`}
-              >
-                <span
-                  className={clsx(
-                    'flex size-4 items-center justify-center rounded-full text-[9px] transition-colors',
-                    item.percent >= 100
-                      ? 'bg-emerald-500/20 text-emerald-300'
-                      : stage === item.stage && tab === 'step'
-                        ? 'bg-pink-500/30 text-pink-200'
-                        : 'bg-white/10 text-slate-400',
-                  )}
-                >
-                  {item.percent >= 100 ? '✓' : idx + 1}
-                </span>
-                <span className="hidden xl:inline">{item.title}</span>
-                <span className="text-[9px] opacity-60">{item.percent}%</span>
-              </button>
-            ))}
+          </div>
+          <div className="flex flex-wrap items-center gap-1.5" aria-label="工作室工具">
+            <Link
+              href="/settings?tab=models"
+              className="hidden rounded-lg border border-[#2b3240] px-2.5 py-1 text-[11px] text-slate-400 transition-colors hover:border-pink-400/40 hover:text-slate-200 xl:inline-block"
+            >
+              模型路由 →
+            </Link>
+            <Button
+              size="sm"
+              variant={tab === 'agent' ? 'primary' : 'default'}
+              onClick={() => openPanel(tab === 'agent' && !panelCollapsed ? 'step' : 'agent')}
+            >
+              🤖 Agent
+            </Button>
+            <Button
+              size="sm"
+              variant={tab === 'canvas' ? 'primary' : 'default'}
+              onClick={() => openPanel(tab === 'canvas' && !panelCollapsed ? 'step' : 'canvas')}
+            >
+              📚 素材
+            </Button>
+            <Button size="sm" variant={tab === 'tasks' ? 'primary' : 'default'} onClick={() => openPanel('tasks')}>
+              任务{activeJobs.length ? ` (${activeJobs.length})` : failedCount ? ` · ${failedCount} 需关注` : ''}
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => { router.refresh(); void loadJobs(); }}>
+              刷新
+            </Button>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <Link
-            href="/settings?tab=models"
-            className="hidden rounded-lg border border-[#2b3240] px-2.5 py-1 text-[11px] text-slate-400 transition-colors hover:border-pink-400/40 hover:text-slate-200 xl:inline-block"
-          >
-            模型路由 →
-          </Link>
-          <Button
-            size="sm"
-            variant={tab === 'agent' ? 'primary' : 'default'}
-            onClick={() => openPanel(tab === 'agent' && !panelCollapsed ? 'step' : 'agent')}
-          >
-            🤖 Agent
-          </Button>
-          <Button
-            size="sm"
-            variant={tab === 'canvas' ? 'primary' : 'default'}
-            onClick={() => openPanel(tab === 'canvas' && !panelCollapsed ? 'step' : 'canvas')}
-          >
-            📚 素材
-          </Button>
-          <Button size="sm" variant={tab === 'tasks' ? 'primary' : 'default'} onClick={() => openPanel('tasks')}>
-            任务{activeJobs.length ? ` (${activeJobs.length})` : failedCount ? ` · ${failedCount} 需关注` : ''}
-          </Button>
-          <Button size="sm" variant="ghost" onClick={() => { router.refresh(); void loadJobs(); }}>
-            刷新
-          </Button>
-        </div>
+        <WorkflowNav progress={data.progress} stage={stage} onSelect={(next) => { setStage(next); setTab('step'); setPanelCollapsed(false); }} />
       </header>
 
       {(activeJobs.length > 0 || message || jobsError) && (
-        <div className="space-y-1 border-b border-[#1c2129] bg-[#0e1116] px-5 py-2">
+        <div className="shrink-0 space-y-1 border-b border-[#1c2129] bg-[#0e1116] px-3 py-2 sm:px-5">
           {activeJobs.length > 0 ? (
             <button type="button" onClick={() => openPanel('tasks')} className="flex w-full items-center gap-3 text-left" aria-label="查看进行中的任务">
               <Badge tone="blue">{activeJobs.length} 个任务进行中</Badge>
               <span className="min-w-0 flex-1"><Progress value={activeJobs[0].progress} /></span>
-              <span className="max-w-[240px] truncate text-[11px] text-slate-400">{activeJobs[0].stageLabel || '排队中'}</span>
+              <span className="hidden max-w-[240px] truncate text-[11px] text-slate-400 sm:inline">{activeJobs[0].stageLabel || '排队中'}</span>
               <span className="shrink-0 text-[11px] text-pink-300">任务中心 →</span>
             </button>
           ) : null}
@@ -160,15 +136,15 @@ export default function StudioClient({ data }: { data: StudioData }) {
         </div>
       )}
 
-      <div className="flex min-h-0 flex-1">
+      <div className="studio-workspace">
         {showCanvas ? (
-          <div className="flex min-w-0 flex-1 flex-col">
+          <div className="studio-canvas-area flex min-w-0 flex-1 flex-col">
             <div className="min-h-0 flex-1">
               <StudioCanvasBoard data={{ ...data, jobs }} onJobAccepted={acceptJob} onOpenTasks={() => openPanel('tasks')} />
             </div>
           </div>
         ) : (
-          <main className="min-w-0 flex-1 overflow-y-auto bg-[#0e1116] p-6">
+          <main className="studio-document min-w-0 flex-1 bg-[#0e1116] p-4 sm:p-6 lg:p-8">
             <div key={stage} className="mx-auto max-w-3xl animate-fade-in-up">
               {stage === 'brief' ? (
                 <StepBriefPanel data={data} busy={busy} run={run} />
@@ -201,14 +177,15 @@ export default function StudioClient({ data }: { data: StudioData }) {
             <button
               type="button"
               onClick={() => setPanelCollapsed(false)}
-              className="flex w-9 shrink-0 items-center justify-center border-l border-[#1c2129] bg-[#0b0d12] text-slate-500 transition-colors hover:bg-white/5 hover:text-slate-200"
+              className="studio-panel-toggle border-ink-600 bg-ink-800 text-xs text-slate-400 transition-colors hover:bg-white/5 hover:text-slate-200"
+              aria-expanded={false}
               title="展开面板"
             >
-              <span className="text-lg">«</span>
+              <span>展开面板</span>
             </button>
           ) : (
-            <aside className="w-[460px] shrink-0 overflow-y-auto border-l border-[#1c2129] bg-[#0b0d12] p-3">
-              <div className="mb-2 flex items-center justify-between gap-2">
+            <aside id="studio-panel" aria-label="工作室面板" className="studio-side-panel border-ink-600 bg-ink-900">
+              <div className="sticky top-0 z-10 flex items-center justify-between gap-2 border-b border-ink-600 bg-ink-900 px-4 py-3">
                 {tab === 'agent' ? (
                 <div className="flex rounded-lg border border-[#242a36] bg-[#0e1116] p-0.5 text-[11px]">
                   <button
@@ -233,7 +210,7 @@ export default function StudioClient({ data }: { data: StudioData }) {
                   </button>
                 </div>
               ) : (
-                <span />
+                <h2 className="text-xs font-medium text-slate-300">{tab === 'tasks' ? '任务与记录' : tab === 'canvas' ? '素材库' : data.progress.find((item) => item.stage === stage)?.title ?? '当前步骤'}</h2>
               )}
               <button
                 type="button"
@@ -244,7 +221,7 @@ export default function StudioClient({ data }: { data: StudioData }) {
                 收起 »
               </button>
             </div>
-            <div key={tab + stage} className="animate-fade-in">
+            <div key={tab + stage} className="panel-enter p-4">
               {tab === 'tasks' ? (
                 <TaskCenter projectId={data.project.id} jobs={jobs} syncError={jobsError} onRefresh={loadJobs} onAccepted={acceptJob} />
               ) : tab === 'canvas' ? (

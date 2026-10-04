@@ -16,7 +16,7 @@
     "start:web": "pnpm --filter @sakura/web start",
     "start:worker": "pnpm --filter @sakura/worker start",
     "typecheck": "pnpm -r typecheck",
-    "test": "tsx --tsconfig apps/web/tsconfig.json --test packages/core/src/utils/jobs.test.ts apps/web/src/components/studio/canvas-state.test.ts apps/web/src/components/studio/CanvasInspector.test.ts packages/pipeline/src/qa.test.ts scripts/studio-jobs.test.mjs scripts/check-brands.test.mjs scripts/neutral-integrations.test.mjs",
+    "test": "tsx --tsconfig apps/web/tsconfig.json --test apps/web/src/components/layout.test.ts packages/core/src/utils/jobs.test.ts apps/web/src/components/studio/canvas-state.test.ts apps/web/src/components/studio/CanvasInspector.test.ts packages/pipeline/src/qa.test.ts scripts/studio-jobs.test.mjs scripts/check-brands.test.mjs scripts/neutral-integrations.test.mjs",
     "check:brands": "node scripts/check-brands.mjs",
     "bump": "node scripts/bump-version.mjs",
     "db:migrate": "pnpm --filter @sakura/db migrate",

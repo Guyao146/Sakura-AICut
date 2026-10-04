@@ -46,7 +46,8 @@ export function NewProjectForm() {
   }
 
   return (
-    <Card title="新建项目">
+    <Card title={<span className="flex items-center gap-2"><span className="flex size-7 items-center justify-center rounded-lg bg-sakura-500/10 text-pink-300" aria-hidden="true">✦</span>开始新故事</span>} className="new-project-card rounded-2xl sm:p-5">
+      <p className="mb-5 text-xs leading-5 text-slate-400">给作品起个名字，建立你的创作空间。</p>
       <Field label="项目名称">
         <Input value={name} placeholder="例如：樱花复仇计划" onChange={(event) => setName(event.target.value)} />
       </Field>
@@ -62,8 +63,9 @@ export function NewProjectForm() {
                 key={genre}
                 type="button"
                 onClick={() => setGenres(active ? genres.filter((item) => item !== genre) : [...genres, genre])}
+                aria-pressed={active}
                 className={clsx(
-                  'rounded-md border px-2 py-1 text-[11px]',
+                  'choice-chip rounded-md border px-2 py-1 text-[11px]',
                   active ? 'border-pink-400/50 bg-pink-500/15 text-pink-200' : 'border-[#2b3240] text-slate-400',
                 )}
               >
@@ -103,7 +105,7 @@ export function NewProjectForm() {
         </Field>
       </div>
       {error ? <div className="mb-2 text-[11px] text-red-300">{error}</div> : null}
-      <Button variant="primary" loading={busy} onClick={() => void create()}>
+      <Button variant="primary" className="mt-2 w-full" loading={busy} onClick={() => void create()}>
         创建并进入工作台
       </Button>
     </Card>
