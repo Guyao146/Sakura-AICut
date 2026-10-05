@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   APP_VERSION,
@@ -825,6 +825,107 @@ function ProviderFormView({
 /* ============================ 关于我们 ============================ */
 
 const REPO_URL = 'https://github.com/Guyao146/Sakura-AICut';
+/** GitHub Releases 最新版本接口：仅读取最新 Release 的版本号，用于更新提示 */
+const LATEST_RELEASE_API = 'https://api.github.com/repos/Guyao146/Sakura-AICut/releases/latest';
+
+type Semver = [number, number, number];
+
+function parseSemver(version: string): Semver | null {
+  const match = /^v?(\d+)\.(\d+)\.(\d+)/.exec(version.trim());
+  return match ? [Number(match[1]), Number(match[2]), Number(match[3])] : null;
+}
+
+function compareSemver(a: Semver, b: Semver): number {
+  return a[0] - b[0] || a[1] - b[1] || a[2] - b[2];
+}
+
+type UpdateState =
+  | { status: 'checking' }
+  | { status: 'latest' }
+  | { status: 'available'; tag: string; url: string }
+  | { status: 'error' };
+
+/**
+ * 版本更新检查：对比 GitHub Releases 最新版本与 APP_VERSION。
+ * 只做提示，不强制更新；检查失败（离线 / 限流）静默降级为可重试的错误文案。
+ */
+function UpdateChecker() {
+  const [state, setState] = useState<UpdateState>({ status: 'checking' });
+
+  const check = useCallback(async () => {
+    setState({ status: 'checking' });
+    try {
+      const response = await fetch(LATEST_RELEASE_API, {
+        headers: { accept: 'application/vnd.github+json' },
+        signal: AbortSignal.timeout(10000),
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const release = (await response.json()) as { tag_name?: unknown; html_url?: unknown };
+      const tag = typeof release.tag_name === 'string' ? release.tag_name.trim() : '';
+      const latest = tag ? parseSemver(tag) : null;
+      const current = parseSemver(APP_VERSION);
+      if (latest && current && compareSemver(latest, current) > 0) {
+        setState({
+          status: 'available',
+          tag,
+          url: typeof release.html_url === 'string' ? release.html_url : `${REPO_URL}/releases/latest`,
+        });
+      } else {
+        setState({ status: 'latest' });
+      }
+    } catch {
+      setState({ status: 'error' });
+    }
+  }, []);
+
+  useEffect(() => {
+    void check();
+  }, [check]);
+
+  return (
+    <Card title="版本与更新">
+      <div className="flex flex-wrap items-center gap-3 text-xs">
+        <span className="rounded-lg border border-ink-600 bg-ink-800/50 px-3 py-2 text-slate-300">
+          当前版本 <span className="font-medium text-slate-100">v{APP_VERSION}</span>
+        </span>
+        <button
+          type="button"
+          onClick={() => void check()}
+          disabled={state.status === 'checking'}
+          className="ui-button rounded-lg border border-ink-600 px-4 py-2 text-slate-300 transition-colors hover:border-pink-400/40 hover:text-pink-200 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {state.status === 'checking' ? '检查中…' : '检查更新'}
+        </button>
+        {state.status === 'latest' && <span className="text-slate-400">已是最新版本。</span>}
+        {state.status === 'available' && (
+          <span className="flex flex-wrap items-center gap-2">
+            <span className="rounded-lg bg-pink-500/10 px-3 py-2 text-pink-200">
+              发现新版本 <span className="font-medium">{state.tag}</span>
+            </span>
+            <a
+              className="text-pink-300 underline-offset-2 hover:text-pink-200 hover:underline"
+              href={state.url}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              查看 Release
+            </a>
+          </span>
+        )}
+        {state.status === 'error' && (
+          <span className="text-slate-500">
+            检查更新失败（网络不可达或 GitHub API 限流），可稍后重试，或前往
+            <a className="px-1 text-pink-300 hover:text-pink-200" href={`${REPO_URL}/releases`} target="_blank" rel="noopener noreferrer">Release 页面</a>
+            手动查看。
+          </span>
+        )}
+      </div>
+      <p className="mt-3 text-[11px] leading-5 text-slate-500">
+        打开本页时自动检查一次，仅作提示；Docker 部署不会自动更新，如需升级请按部署文档手动更换镜像。
+      </p>
+    </Card>
+  );
+}
 
 export function AboutTab() {
   return (
@@ -862,6 +963,8 @@ export function AboutTab() {
           </dl>
         </div>
       </Card>
+
+      <UpdateChecker />
 
       <Card title="许可证与授权">
         <div className="space-y-3 text-xs leading-6 text-slate-400">
