@@ -9,8 +9,8 @@ import { SESSION_COOKIE, verifySessionToken } from '@/lib/session';
  */
 
 const PUBLIC_PAGES = new Set(['/login']);
-/** OIDC 登录发起与回调必须对未登录开放 */
-const PUBLIC_API_PREFIXES = ['/api/auth/login/', '/api/auth/callback/'];
+/** OIDC 登录发起与回调必须对未登录开放；/api/open/ 由开放 API 自行校验 X-API-Key */
+const PUBLIC_API_PREFIXES = ['/api/auth/login/', '/api/auth/callback/', '/api/open/'];
 
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;

@@ -83,6 +83,40 @@ pnpm db:migrate      # 建库 + 写入内置提示词
 pnpm dev             # 同时启动 web(3000) 与 worker
 ```
 
+## 🔌 开放 API
+
+`/api/open/*` 是独立于会话登录体系的机器接口，用请求头 **`X-API-Key`** 鉴权。服务端通过环境变量 `AICUT_OPEN_API_KEYS` 配置允许的 key（**英文逗号分隔可配多个**；未配置或留空时所有请求返回 401，即 fail-closed）。本地开发写在 `apps/web/.env.local`。
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| GET | `/api/open/projects?limit=n` | 项目列表 `{ projects: [{ id, name, updatedAt }] }` |
+| POST | `/api/open/projects` | 创建项目，body `{ "name": "..." }` → `{ id, name }` |
+| POST | `/api/open/jobs` | 提交时间线导出，body `{ projectId, includeSubtitles?, preset? }` → `{ jobId, status }`（缺省 `includeSubtitles=true`、`preset=vertical-1080p`） |
+| GET | `/api/open/jobs/[id]` | 任务状态 `{ jobId, status, error? }`，status 为可读字符串（排队 / 运行中 / 成功 / 失败 / 已取消） |
+
+所有响应均为 JSON；出错时返回 `{ "error": "..." }`（401 未授权 / 400 参数错误 / 404 不存在）。
+
+curl 示例：
+
+```bash
+KEY="sk-aicut-open-xxxxxxxxxxxxxxxxxxxxxxxx"
+
+# 列出项目
+curl -s -H "X-API-Key: $KEY" http://localhost:3000/api/open/projects
+
+# 创建项目
+curl -s -X POST -H "X-API-Key: $KEY" -H "Content-Type: application/json" \
+  -d '{"name":"我的项目"}' http://localhost:3000/api/open/projects
+
+# 提交导出任务
+curl -s -X POST -H "X-API-Key: $KEY" -H "Content-Type: application/json" \
+  -d '{"projectId":"prj_xxxx","includeSubtitles":true,"preset":"vertical-1080p"}' \
+  http://localhost:3000/api/open/jobs
+
+# 查询任务状态
+curl -s -H "X-API-Key: $KEY" http://localhost:3000/api/open/jobs/job_xxxx
+```
+
 ## 🔒 许可证
 
 本项目采用 **Sakura-License v1.2**（固定文本标识 `Sakura-License-1.2`）。完整正文见 [LICENSE](./LICENSE)，采用声明（项目、许可人、适用范围与首次适用提交）见 [NOTICE.md](./NOTICE.md)。
