@@ -38,16 +38,32 @@ export function ProjectLibrary({ projects }: { projects: Project[] }) {
         ))}
         <span role="status" className="ml-auto self-center text-xs text-slate-500">{visible.length} 个项目</span>
       </div>
-      {visible.length === 0 ? (
+      {visible.length === 0 && projects.length > 0 ? (
         <div className="library-empty motion-enter rounded-2xl border border-dashed border-ink-500 bg-ink-800/50 px-5 py-12 text-center">
           <span className="mb-3 block text-3xl text-sakura-500" aria-hidden="true">◇</span>
-          <h3 className="text-sm font-medium text-slate-200">{projects.length ? '没有匹配的项目' : '你的下一个故事，从这里开始'}</h3>
-          <p className="mt-2 text-xs leading-6 text-slate-400">{projects.length ? '换个关键词，或查看全部项目。' : '先填写一个名称，其他设定可以在工作室里慢慢完善。'}</p>
-          {projects.length ? <Button className="mt-4" variant="ghost" onClick={() => { setQuery(''); setFilter('all'); }}>清除筛选</Button>
-            : <a href="#new-project" className="ui-button ui-button-primary mt-4 inline-flex rounded-lg bg-pink-500 px-4 py-2 text-xs font-medium text-white">创建第一个项目 →</a>}
+          <h3 className="text-sm font-medium text-slate-200">没有匹配的项目</h3>
+          <p className="mt-2 text-xs leading-6 text-slate-400">换个关键词，或查看全部项目。</p>
+          <Button className="mt-4" variant="ghost" onClick={() => { setQuery(''); setFilter('all'); }}>清除筛选</Button>
         </div>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2">
+          <a href="#new-project" aria-label="新建项目"
+            className="project-card motion-enter group flex min-w-0 flex-col rounded-2xl border border-dashed border-ink-500 bg-ink-800/40 p-5 transition-colors hover:border-pink-400/40 hover:bg-white/5">
+            <div className="project-cover relative -mx-5 -mt-5 mb-5 flex h-24 items-center justify-center rounded-t-2xl p-5">
+              <div className="project-cover-art" aria-hidden="true"><span /><span /></div>
+              <span className="project-cover-icon relative flex size-10 items-center justify-center rounded-xl border border-white/10 bg-ink-900/40 text-pink-200" aria-hidden="true">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                  <path d="M12 5v14M5 12h14" />
+                </svg>
+              </span>
+            </div>
+            <h3 className="text-sm font-semibold text-slate-100">新建项目</h3>
+            <p className="mt-2 line-clamp-2 min-h-10 text-xs leading-5 text-slate-400">填写名称，建立新的创作空间；其他设定可以在工作室里慢慢完善。</p>
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-ink-600 pt-3 text-[11px]">
+              <span className="text-slate-500">开始新故事</span>
+              <span className="text-pink-300 transition-colors group-hover:text-pink-200" aria-hidden="true">＋</span>
+            </div>
+          </a>
           {visible.map((project, index) => (
             <Link key={project.id} href={`/studio/${project.id}`} data-stage={project.stage}
               style={{ animationDelay: `${Math.min(index, 6) * 45}ms` }}

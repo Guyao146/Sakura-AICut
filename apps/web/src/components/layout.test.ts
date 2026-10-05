@@ -5,7 +5,6 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { DEFAULT_BRIEF, type Project } from '@sakura/core';
 import { filterProjects, ProjectLibrary } from './ProjectLibrary';
 import { AppShell } from './AppShell';
-import { HomeKanban } from './HomeKanban';
 import { WorkflowNav } from './studio/WorkflowNav';
 import { Button } from './ui';
 
@@ -41,6 +40,18 @@ test('项目库空态提供新建入口，卡片显示中文阶段与项目链�
   assert.doesNotMatch(html, />brief</);
 });
 
+test('项目库首格为新建项目入口，位于已有项目之前', () => {
+  const html = renderToStaticMarkup(createElement(ProjectLibrary, { projects }));
+  const create = html.indexOf('aria-label="新建项目"');
+  const firstProject = html.indexOf('href="/studio/');
+  assert.ok(create > -1 && create < firstProject);
+  assert.ok(html.slice(create, firstProject).includes('border-dashed'));
+  const cards = html.match(/class="project-card /g) ?? [];
+  assert.equal(cards.length, projects.length + 1);
+  const empty = renderToStaticMarkup(createElement(ProjectLibrary, { projects: [] }));
+  assert.match(empty, /aria-label="新建项目"/);
+});
+
 test('流程导航始终显示步骤名称，当前步骤与完成状态分别表达', () => {
   const progress = ['brief', 'script', 'assets', 'shots', 'edit'].map((stage, index) => ({
     stage, index, title: ['项目设定', '剧本创作', '资产生成', '分镜片段', '在线剪辑'][index],
@@ -63,30 +74,21 @@ test('项目卡片错峰入场延迟有上限，装饰不进入辅助技术名�
   assert.equal(delays.length, 12);
   assert.deepEqual(delays.slice(0, 3), [0, 45, 90]);
   assert.ok(delays.every((value) => value <= 270));
-  assert.equal((html.match(/class="project-cover-art" aria-hidden="true"/g) ?? []).length, 12);
+  assert.equal((html.match(/class="project-cover-art" aria-hidden="true"/g) ?? []).length, 13);
   assert.equal((html.match(/data-stage="brief"/g) ?? []).length, 12);
 });
 
-test('应用外壳为极简顶栏：左上角 logo 与注销，不含主导航磁贴', () => {
+test('应用外壳为极简顶栏：左上角 logo，右上角全局设置与注销', () => {
   const html = renderToStaticMarkup(createElement(AppShell, { children: createElement('div', null, '页面内容') }));
   assert.match(html, /跳到主要内容/);
   assert.match(html, /href="\/"/);
   assert.match(html, /Sakura AI Cut/);
+  assert.match(html, /href="\/settings"/);
+  assert.match(html, /全局设置/);
   assert.match(html, /注销登录/);
   assert.doesNotMatch(html, /aria-label="主导航"/);
   assert.doesNotMatch(html, /kanban-tile/);
   assert.equal((html.match(/aria-current="page"/g) ?? []).length, 0);
-});
-
-test('首页看板磁贴承载主导航：项目空间锚定项目库，全局设置跳转设置页', () => {
-  const html = renderToStaticMarkup(createElement(HomeKanban, { projectCount: 3 }));
-  assert.match(html, /aria-label="看板导航"/);
-  assert.match(html, /href="#project-library"/);
-  assert.match(html, /href="\/settings"/);
-  assert.match(html, /项目空间/);
-  assert.match(html, /全局设置/);
-  assert.match(html, /3 个项目/);
-  assert.equal((html.match(/<a /g) ?? []).length, 2);
 });
 
 test('主按钮保留加载和禁用语义，视觉样式不影响其它变体', () => {
