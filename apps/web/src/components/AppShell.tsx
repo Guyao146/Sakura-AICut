@@ -28,15 +28,3 @@ export function AppShell({ children }: { children: ReactNode }) {
     </div>
   );
 }
-
-export function PageHeader({ title, subtitle, extra }: { title: string; subtitle?: string; extra?: ReactNode }) {
-  return (
-    <header className="page-header flex flex-wrap items-center justify-between gap-3 border-b border-ink-600 bg-ink-900/90 px-4 py-5 sm:px-6 lg:px-8">
-      <div className="min-w-0">
-        <h1 className="text-lg font-semibold tracking-tight text-slate-100">{title}</h1>
-        {subtitle ? <p className="mt-1 text-xs leading-5 text-slate-400">{subtitle}</p> : null}
-      </div>
-      {extra ? <div className="flex shrink-0 items-center gap-2">{extra}</div> : null}
-    </header>
-  );
-}

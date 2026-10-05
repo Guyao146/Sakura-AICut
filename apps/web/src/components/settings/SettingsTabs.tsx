@@ -881,6 +881,7 @@ export function AboutTab() {
       <Card title="资源与链接">
         <div className="flex flex-wrap gap-2">
           <a className="ui-button ui-button-primary rounded-lg bg-pink-500 px-4 py-2 text-xs font-medium text-white" href={REPO_URL}>源码仓库</a>
+          <a className="ui-button rounded-lg border border-ink-600 px-4 py-2 text-xs text-slate-300" href="https://www.mcylyr.cn" target="_blank" rel="noopener noreferrer">顾瑶工作室官网</a>
           <a className="ui-button rounded-lg border border-ink-600 px-4 py-2 text-xs text-slate-300" href="https://wiki.mcylyr.cn/#/../licenses/Sakura-License-1.2">许可证正文（Wiki）</a>
           <a className="ui-button rounded-lg border border-ink-600 px-4 py-2 text-xs text-slate-300" href={`${REPO_URL}/issues`}>问题与授权申请</a>
         </div>

@@ -378,7 +378,7 @@ label.form-label {
 .app-topbar {
   background-image: linear-gradient(110deg, rgb(244 114 182 / 4%), transparent 55%);
 }
-.page-header, .studio-header {
+.studio-header {
   background-image: linear-gradient(110deg, rgb(244 114 182 / 3%), transparent 55%);
 }
 .brand-mark {
