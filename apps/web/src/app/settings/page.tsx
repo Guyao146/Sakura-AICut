@@ -1,11 +1,12 @@
 import { bootstrap, getAppSettings, listCustomCameraMoves, listOidcProviders, listPromptTemplates } from '@sakura/db';
+import Link from 'next/link';
 import { AppShell } from '@/components/AppShell';
 import { SettingsClient } from '@/components/settings/SettingsClient';
 import { connectedRoutesSummary } from '@/lib/server/ai';
 
 /**
  * 设置页：API 接入 / 模型路由 / 提示词库 / 运镜库 / 通用设置 / 关于我们
- * 所有全局设置集中在此，不在主导航铺开。
+ * 所有全局设置集中在此，不在主导航铺开。顶栏右侧提供返回主页入口。
  */
 export const dynamic = 'force-dynamic';
 
@@ -19,7 +20,17 @@ export default async function SettingsPage({
   const summary = connectedRoutesSummary();
 
   return (
-    <AppShell>
+    <AppShell
+      topbarExtra={
+        <Link
+          href="/"
+          aria-label="返回主页"
+          className="flex items-center gap-2 rounded-lg border border-[#242a36] px-3 py-2 text-[12px] text-slate-400 transition-colors hover:border-pink-400/40 hover:text-pink-200"
+        >
+          <span aria-hidden="true">←</span>返回主页
+        </Link>
+      }
+    >
       <SettingsClient
         data={{
           providers: summary.providers.map((provider) => ({

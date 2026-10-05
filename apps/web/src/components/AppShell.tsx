@@ -5,8 +5,9 @@ import { LogoutButton } from './LogoutButton';
 /**
  * 应用外壳：极简顶栏（左上角品牌 logo，右上角全局设置与注销）。
  * 项目入口在首页项目库首格承载，外壳不再承担页面跳转。
+ * 页面可通过 topbarExtra 在顶栏右侧追加自己的操作（如设置页的“返回主页”）。
  */
-export function AppShell({ children }: { children: ReactNode }) {
+export function AppShell({ children, topbarExtra }: { children: ReactNode; topbarExtra?: ReactNode }) {
   return (
     <div className="app-shell min-h-dvh">
       <a href="#page-content" className="skip-link">跳到主要内容</a>
@@ -17,6 +18,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <span className="text-sm font-semibold tracking-wide text-slate-100">Sakura AI Cut</span>
           </Link>
           <div className="flex w-full shrink-0 items-center justify-end gap-2 sm:w-auto">
+            {topbarExtra}
             <Link href="/settings" className="flex items-center gap-2 rounded-lg border border-[#242a36] px-3 py-2 text-[12px] text-slate-400 transition-colors hover:border-pink-400/40 hover:text-pink-200">
               <span aria-hidden="true">⚙</span>全局设置
             </Link>
