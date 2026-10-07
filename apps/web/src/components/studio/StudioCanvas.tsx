@@ -453,11 +453,11 @@ function GroupNode({ data }: { data: { item: CanvasItem; groupColor?: string } }
   return (
     <div
       className="relative rounded-2xl border-2 border-dashed h-full w-full p-3"
-      style={{ borderColor: (groupColor ?? '#f472b6') + '55', backgroundColor: (groupColor ?? '#f472b6') + '0d' }}
+      style={{ borderColor: (groupColor ?? 'var(--color-sakura-500)') + '55', backgroundColor: (groupColor ?? 'var(--color-sakura-500)') + '0d' }}
     >
       <div
         className="absolute -top-3 left-4 rounded-full px-3 py-0.5 text-[11px] font-medium text-white"
-        style={{ backgroundColor: groupColor ?? '#f472b6' }}
+        style={{ backgroundColor: groupColor ?? 'var(--color-sakura-500)' }}
       >
         🎬 {item.text}
       </div>
@@ -472,7 +472,7 @@ const NODE_TYPES = { default: CanvasItemNode as any, group: GroupNode as any };
 const DEFAULT_EDGE_OPTIONS = {
   type: 'bezier' as const,
   animated: true,
-  style: { stroke: '#f472b6', strokeWidth: 2 },
+  style: { stroke: 'var(--color-sakura-500)', strokeWidth: 2 },
 };
 
 /** 画幅比例选项（画幅偏好前置到生成入口） */
@@ -1386,7 +1386,7 @@ function CanvasInner({
         <MiniMap
           className="!bg-[#12151c]"
           maskColor="rgba(10,12,18,0.7)"
-          nodeColor={(n) => ((n.data as any)?.item?.kind === 'video' ? '#f472b6' : '#3b4356')}
+          nodeColor={(n) => ((n.data as any)?.item?.kind === 'video' ? 'var(--color-sakura-500)' : '#3b4356')}
           pannable
           zoomable
         />

@@ -61,7 +61,7 @@ body {
   border: 1px solid var(--color-ink-900) !important;
   border-radius: 4px !important;
   background-color: var(--color-sakura-500) !important;
-  box-shadow: 0 0 0 1px rgba(244, 114, 182, 0.35), 0 1px 4px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-sakura-500) 35%, transparent), 0 1px 4px rgba(0, 0, 0, 0.5);
   transition: transform 0.12s ease;
 }
 .react-flow__resize-control.handle:hover {
@@ -69,13 +69,13 @@ body {
   background-color: var(--color-sakura-400) !important;
 }
 .react-flow__resize-control.line {
-  border-color: rgba(244, 114, 182, 0.45) !important;
+  border-color: color-mix(in srgb, var(--color-sakura-500) 45%, transparent) !important;
 }
 /* 框选多节点时的选区 */
 .react-flow__nodesselection-rect,
 .react-flow__selection {
-  background: rgba(244, 114, 182, 0.06);
-  border: 1px dashed rgba(244, 114, 182, 0.75) !important;
+  background: color-mix(in srgb, var(--color-sakura-500) 6%, transparent);
+  border: 1px dashed color-mix(in srgb, var(--color-sakura-500) 75%, transparent) !important;
 }
 /* 节点本体：去掉 xyflow 对 default/group/input/output 类型的内置主题
    （白底 #fff + 深色边框 + padding:10px + width:150px + 3px 圆角），
@@ -210,7 +210,7 @@ body {
   transform: translateY(-2px);
   box-shadow:
     0 8px 22px rgba(0, 0, 0, 0.5),
-    0 0 0 1px rgba(244, 114, 182, 0.25);
+    0 0 0 1px color-mix(in srgb, var(--color-sakura-500) 25%, transparent);
 }
 
 /* 骨架屏微光 */
@@ -281,7 +281,7 @@ body {
   inset: -1px;
   border-radius: inherit;
   padding: 1px;
-  background: linear-gradient(120deg, transparent 20%, rgba(244, 114, 182, 0.9) 50%, transparent 80%);
+  background: linear-gradient(120deg, transparent 20%, color-mix(in srgb, var(--color-sakura-500) 90%, transparent) 50%, transparent 80%);
   background-size: 250% 100%;
   animation: node-glow 1.2s linear infinite;
   -webkit-mask:
@@ -311,7 +311,7 @@ body {
 }
 .field:focus {
   border-color: var(--color-sakura-500);
-  box-shadow: 0 0 0 3px rgb(244 114 182 / 10%);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-sakura-500) 10%, transparent);
 }
 .field:hover:not(:disabled):not(:focus) {
   border-color: #596174;
@@ -371,28 +371,28 @@ label.form-label {
 }
 
 /* ---------- 樱花影棚：轻量层次与交互 ---------- */
-::selection { background: rgb(244 114 182 / 28%); color: #fff; }
+::selection { background: color-mix(in srgb, var(--color-sakura-500) 28%, transparent); color: #fff; }
 .app-shell {
   background: radial-gradient(ellipse at 80% 0%, rgb(125 211 252 / 3%), transparent 45%), var(--color-ink-900);
 }
 .app-topbar {
-  background-image: linear-gradient(110deg, rgb(244 114 182 / 4%), transparent 55%);
+  background-image: linear-gradient(110deg, color-mix(in srgb, var(--color-sakura-500) 4%, transparent), transparent 55%);
 }
 .studio-header {
-  background-image: linear-gradient(110deg, rgb(244 114 182 / 3%), transparent 55%);
+  background-image: linear-gradient(110deg, color-mix(in srgb, var(--color-sakura-500) 3%, transparent), transparent 55%);
 }
 .brand-mark {
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / 8%), 0 0 24px rgb(244 114 182 / 5%);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 8%), 0 0 24px color-mix(in srgb, var(--color-sakura-500) 5%, transparent);
   transition: transform 260ms var(--ease-spring), box-shadow 260ms ease;
 }
 .choice-chip, .workflow-step, .ui-button {
   transition: background-color 180ms ease, border-color 180ms ease, color 180ms ease,
     box-shadow 220ms ease, transform 220ms var(--ease-spring);
 }
-.choice-chip[aria-pressed="true"] { box-shadow: inset 0 0 0 1px rgb(244 114 182 / 20%); }
+.choice-chip[aria-pressed="true"] { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-sakura-500) 20%, transparent); }
 .ui-button-primary {
   background-image: linear-gradient(115deg, rgb(255 255 255 / 12%), transparent 60%);
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / 16%), 0 4px 16px rgb(236 72 153 / 12%);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 16%), 0 4px 16px color-mix(in srgb, var(--color-pink-500) 12%, transparent);
 }
 .ui-button:active:not(:disabled), .choice-chip:active:not(:disabled) { transform: scale(0.98); }
 .surface-card {
@@ -400,8 +400,8 @@ label.form-label {
   box-shadow: inset 0 1px 0 rgb(255 255 255 / 3%), 0 8px 24px rgb(0 0 0 / 8%);
 }
 .new-project-card {
-  border-top-color: rgb(244 114 182 / 35%);
-  background-image: radial-gradient(ellipse at 100% 0%, rgb(244 114 182 / 7%), transparent 55%);
+  border-top-color: color-mix(in srgb, var(--color-sakura-500) 35%, transparent);
+  background-image: radial-gradient(ellipse at 100% 0%, color-mix(in srgb, var(--color-sakura-500) 7%, transparent), transparent 55%);
 }
 .new-project-card:focus-within { border-top-color: var(--color-sakura-500); }
 
@@ -418,14 +418,14 @@ label.form-label {
 .panel-enter, .studio-side-panel { animation: panel-reveal 240ms ease-out; }
 .canvas-dock {
   animation: panel-reveal 320ms ease-out;
-  border-top-color: rgb(244 114 182 / 25%);
+  border-top-color: color-mix(in srgb, var(--color-sakura-500) 25%, transparent);
   box-shadow: inset 0 1px 0 rgb(255 255 255 / 6%), 0 12px 36px rgb(0 0 0 / 35%);
 }
 .studio-document {
-  background-image: radial-gradient(ellipse at 50% 0%, rgb(244 114 182 / 4%), transparent 65%);
+  background-image: radial-gradient(ellipse at 50% 0%, color-mix(in srgb, var(--color-sakura-500) 4%, transparent), transparent 65%);
 }
 .studio-side-panel {
-  background-image: linear-gradient(145deg, rgb(244 114 182 / 3%), transparent 35%);
+  background-image: linear-gradient(145deg, color-mix(in srgb, var(--color-sakura-500) 3%, transparent), transparent 35%);
 }
 .workflow-step::after {
   content: '';
@@ -440,7 +440,7 @@ label.form-label {
   transition: transform 280ms var(--ease-spring);
 }
 .workflow-step[aria-current="step"] {
-  box-shadow: inset 0 1px 0 rgb(244 114 182 / 12%), 0 2px 10px rgb(0 0 0 / 10%);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--color-sakura-500) 12%, transparent), 0 2px 10px rgb(0 0 0 / 10%);
 }
 .workflow-step[aria-current="step"]::after { transform: scaleX(1); }
 .react-flow__controls {
@@ -456,8 +456,8 @@ label.form-label {
   position: relative;
   isolation: isolate;
   overflow: hidden;
-  background: radial-gradient(ellipse at 8% 0%, rgb(244 114 182 / 15%), transparent 60%),
-    radial-gradient(ellipse at 90% 100%, rgb(125 211 252 / 9%), transparent 50%), #12151c;
+  background: radial-gradient(ellipse at 8% 0%, color-mix(in srgb, var(--color-sakura-500) 15%, transparent), transparent 60%),
+    radial-gradient(ellipse at 90% 100%, rgb(125 211 252 / 9%), transparent 50%), var(--color-ink-800);
   box-shadow: inset 0 1px 0 rgb(255 255 255 / 5%), 0 12px 40px rgb(0 0 0 / 12%);
 }
 .library-hero::before {
@@ -471,8 +471,8 @@ label.form-label {
   opacity: 0.4;
 }
 .hero-title-accent {
-  color: #fbc7e2;
-  background: linear-gradient(110deg, #fbc7e2 15%, #e6d6f7 70%, #bae6fd);
+  color: var(--color-pink-200);
+  background: linear-gradient(110deg, var(--color-pink-200) 15%, #e6d6f7 70%, #bae6fd);
   background-clip: text;
   -webkit-text-fill-color: transparent;
 }
@@ -481,10 +481,10 @@ label.form-label {
   height: 6px;
   border-radius: 50%;
   background: var(--color-sakura-500);
-  box-shadow: 0 0 12px rgb(244 114 182 / 55%);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--color-sakura-500) 55%, transparent);
 }
-.hero-trail { width: 32px; height: 1px; background: linear-gradient(90deg, rgb(244 114 182 / 45%), rgb(125 211 252 / 25%)); }
-.hero-stats { background: rgb(11 13 18 / 35%); }
+.hero-trail { width: 32px; height: 1px; background: linear-gradient(90deg, color-mix(in srgb, var(--color-sakura-500) 45%, transparent), rgb(125 211 252 / 25%)); }
+.hero-stats { background: color-mix(in srgb, var(--color-ink-900) 35%, transparent); }
 .hero-art {
   position: absolute;
   width: 240px;
@@ -498,7 +498,7 @@ label.form-label {
 .hero-orbit {
   position: absolute;
   inset: -60px -30px;
-  border: 1px solid rgb(244 114 182 / 12%);
+  border: 1px solid color-mix(in srgb, var(--color-sakura-500) 12%, transparent);
   border-radius: 50%;
   transform: rotate(-25deg) scaleY(0.7);
 }
@@ -508,13 +508,13 @@ label.form-label {
   place-items: center;
   width: 120px;
   height: 150px;
-  border: 1px solid rgb(244 114 182 / 20%);
+  border: 1px solid color-mix(in srgb, var(--color-sakura-500) 20%, transparent);
   border-radius: 14px;
-  background: linear-gradient(145deg, rgb(244 114 182 / 9%), rgb(18 21 28 / 20%));
+  background: linear-gradient(145deg, color-mix(in srgb, var(--color-sakura-500) 9%, transparent), color-mix(in srgb, var(--color-ink-800) 20%, transparent));
 }
 .hero-frame-back { top: 0; left: 18px; transform: rotate(-16deg); }
 .hero-frame-front { top: 30px; left: 70px; transform: rotate(12deg); border-color: rgb(125 211 252 / 22%); }
-.hero-frame-front span { font-size: 42px; color: rgb(244 114 182 / 50%); }
+.hero-frame-front span { font-size: 42px; color: color-mix(in srgb, var(--color-sakura-500) 50%, transparent); }
 @keyframes hero-arrive {
   from { opacity: 0; transform: translateY(12px) rotate(-4deg); }
   to { opacity: 0.45; transform: none; }
@@ -527,26 +527,26 @@ label.form-label {
 }
 
 .project-card {
-  --cover-tint: 244 114 182;
+  --cover-tint: var(--color-sakura-500);
   background-image: linear-gradient(155deg, rgb(255 255 255 / 2%), transparent 60%);
   box-shadow: 0 4px 18px rgb(0 0 0 / 8%);
   transition: transform 280ms var(--ease-spring), border-color 220ms ease, box-shadow 280ms ease;
 }
-.project-card[data-stage="script"], .project-card[data-stage="shots"] { --cover-tint: 125 211 252; }
-.project-card[data-stage="assets"], .project-card[data-stage="edit"] { --cover-tint: 196 167 255; }
-.project-card[data-stage="done"] { --cover-tint: 110 231 183; }
+.project-card[data-stage="script"], .project-card[data-stage="shots"] { --cover-tint: #7dd3fc; }
+.project-card[data-stage="assets"], .project-card[data-stage="edit"] { --cover-tint: #c4a7ff; }
+.project-card[data-stage="done"] { --cover-tint: #6ee7b7; }
 .project-cover {
   overflow: hidden;
-  background: radial-gradient(ellipse at 20% 0%, rgb(var(--cover-tint) / 18%), transparent 75%),
-    linear-gradient(120deg, rgb(var(--cover-tint) / 5%), rgb(255 255 255 / 1%));
-  border-bottom: 1px solid rgb(var(--cover-tint) / 10%);
+  background: radial-gradient(ellipse at 20% 0%, color-mix(in srgb, var(--cover-tint) 18%, transparent), transparent 75%),
+    linear-gradient(120deg, color-mix(in srgb, var(--cover-tint) 5%, transparent), rgb(255 255 255 / 1%));
+  border-bottom: 1px solid color-mix(in srgb, var(--cover-tint) 10%, transparent);
 }
 .project-cover::after {
   content: '';
   position: absolute;
   inset: auto 20px 0;
   height: 1px;
-  background: linear-gradient(90deg, rgb(var(--cover-tint) / 45%), transparent);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--cover-tint) 45%, transparent), transparent);
   pointer-events: none;
 }
 .project-cover-art {
@@ -561,32 +561,32 @@ label.form-label {
   height: 84px;
   right: 20%;
   top: 30px;
-  border: 1px solid rgb(var(--cover-tint) / 16%);
+  border: 1px solid color-mix(in srgb, var(--cover-tint) 16%, transparent);
   border-radius: 9px;
   transform: rotate(-18deg);
 }
 .project-cover-art span + span { right: 10%; top: 46px; transform: rotate(12deg); }
-.project-cover-icon { color: rgb(var(--cover-tint)); }
+.project-cover-icon { color: var(--cover-tint); }
 .project-card-arrow { transition: transform 220ms var(--ease-spring); }
 .project-card:focus-visible {
   border-color: var(--color-sakura-500);
   box-shadow: 0 8px 28px rgb(0 0 0 / 24%);
 }
-.library-empty { background-image: radial-gradient(ellipse at 50% 0%, rgb(244 114 182 / 7%), transparent 70%); }
+.library-empty { background-image: radial-gradient(ellipse at 50% 0%, color-mix(in srgb, var(--color-sakura-500) 7%, transparent), transparent 70%); }
 .motion-enter:focus-within { animation: none; }
 
 @media (hover: hover) and (pointer: fine) {
   .ui-button-primary:hover:not(:disabled) {
-    box-shadow: inset 0 1px 0 rgb(255 255 255 / 20%), 0 6px 22px rgb(236 72 153 / 24%);
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 20%), 0 6px 22px color-mix(in srgb, var(--color-pink-500) 24%, transparent);
   }
-  .choice-chip:hover:not(:disabled) { border-color: rgb(244 114 182 / 35%); color: #fce7f3; }
+  .choice-chip:hover:not(:disabled) { border-color: color-mix(in srgb, var(--color-sakura-500) 35%, transparent); color: var(--color-pink-200); }
   .project-card:hover {
-    border-color: rgb(244 114 182 / 40%);
-    box-shadow: 0 14px 32px rgb(0 0 0 / 28%), 0 0 0 1px rgb(244 114 182 / 6%);
+    border-color: color-mix(in srgb, var(--color-sakura-500) 40%, transparent);
+    box-shadow: 0 14px 32px rgb(0 0 0 / 28%), 0 0 0 1px color-mix(in srgb, var(--color-sakura-500) 6%, transparent);
   }
 }
 @media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
-  a:hover > .brand-mark { transform: rotate(-8deg); box-shadow: 0 0 24px rgb(244 114 182 / 15%); }
+  a:hover > .brand-mark { transform: rotate(-8deg); box-shadow: 0 0 24px color-mix(in srgb, var(--color-sakura-500) 15%, transparent); }
   .ui-button:hover:not(:disabled):not(:active) { transform: translateY(-1px); }
   .project-card:hover { transform: translateY(-4px); }
   .project-card:hover .project-cover-art { transform: translateY(-3px) rotate(2deg); }
@@ -598,4 +598,74 @@ label.form-label {
 }
 @media (forced-colors: active) {
   .hero-title-accent { background: none; -webkit-text-fill-color: currentColor; }
+}
+
+/* =====================================================================
+   主题预设：在 [data-theme] 上覆盖强调色与暗色底色变量。
+   Tailwind v4 的工具类（bg-pink-500、text-pink-200、bg-ink-900…）全部引用
+   这些变量，因此切换主题时整站自动重染；:root 默认即樱花主题，无需属性。
+   ===================================================================== */
+html[data-theme='mindmap'] {
+  --color-ink-900: #080c16;
+  --color-ink-800: #0e1424;
+  --color-ink-700: #161e33;
+  --color-ink-600: #1f2944;
+  --color-ink-500: #2d3a5c;
+  --color-sakura-500: #38bdf8;
+  --color-sakura-400: #7dd3fc;
+  --color-pink-200: #c6d9fc;
+  --color-pink-300: #93c5fd;
+  --color-pink-400: #60a5fa;
+  --color-pink-500: #3b82f6;
+}
+
+html[data-theme='aurora'] {
+  --color-ink-900: #07110e;
+  --color-ink-800: #0d1a16;
+  --color-ink-700: #14241f;
+  --color-ink-600: #1d3229;
+  --color-ink-500: #2a4539;
+  --color-sakura-500: #2dd4bf;
+  --color-sakura-400: #5eead4;
+  --color-pink-200: #a7f3d0;
+  --color-pink-300: #6ee7b7;
+  --color-pink-400: #34d399;
+  --color-pink-500: #10b981;
+}
+
+html[data-theme='sunset'] {
+  --color-ink-900: #120c09;
+  --color-ink-800: #1a1110;
+  --color-ink-700: #241816;
+  --color-ink-600: #30221e;
+  --color-ink-500: #412e29;
+  --color-sakura-500: #fb923c;
+  --color-sakura-400: #fdba74;
+  --color-pink-200: #fed7aa;
+  --color-pink-300: #fdba74;
+  --color-pink-400: #fb923c;
+  --color-pink-500: #f97316;
+}
+
+/* 切换主题的整页过渡：以点击位置为圆心的圆形扩散（View Transitions API）。
+   不支持 / 已禁用动画的环境直接瞬时切换。data-theme-animating 仅在切换期间存在，
+   不影响其他视图过渡。 */
+html[data-theme-animating='1'] ::view-transition-old(root) {
+  animation: none;
+}
+html[data-theme-animating='1'] ::view-transition-new(root) {
+  animation: theme-burst 520ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+@keyframes theme-burst {
+  from {
+    clip-path: circle(0% at var(--burst-x, 50%) var(--burst-y, 50%));
+  }
+  to {
+    clip-path: circle(150% at var(--burst-x, 50%) var(--burst-y, 50%));
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  html[data-theme-animating='1'] ::view-transition-new(root) {
+    animation: none;
+  }
 }

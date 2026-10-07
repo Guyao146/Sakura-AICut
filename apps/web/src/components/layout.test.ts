@@ -5,6 +5,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { DEFAULT_BRIEF, type Project } from '@sakura/core';
 import { filterProjects, ProjectLibrary } from './ProjectLibrary';
 import { AppShell } from './AppShell';
+import { THEMES } from './ThemeProvider';
 import { WorkflowNav } from './studio/WorkflowNav';
 import { Button } from './ui';
 
@@ -50,6 +51,16 @@ test('项目库首格为新建项目入口，位于已有项目之前', () => {
   assert.equal(cards.length, projects.length + 1);
   const empty = renderToStaticMarkup(createElement(ProjectLibrary, { projects: [] }));
   assert.match(empty, /aria-label="新建项目"/);
+});
+
+test('主题预设 ID 唯一、均含默认樱花与脑图夜空，色板预览齐备', () => {
+  const ids = THEMES.map((theme) => theme.id);
+  assert.equal(new Set(ids).size, THEMES.length);
+  assert.ok(ids.includes('sakura') && ids.includes('mindmap'));
+  for (const theme of THEMES) {
+    assert.ok(theme.name && theme.desc, theme.id);
+    assert.equal(theme.swatch.length, 2);
+  }
 });
 
 test('流程导航始终显示步骤名称，当前步骤与完成状态分别表达', () => {

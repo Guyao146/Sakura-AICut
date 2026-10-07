@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import clsx from 'clsx';
 import {
   APP_VERSION,
   CAPABILITY_LABELS,
@@ -15,6 +16,7 @@ import {
   type ProviderProtocol,
 } from '@sakura/core';
 import { Badge, Button, Card, Empty, Field, Input, Select, Textarea } from '@/components/ui';
+import { THEMES, useCurrentTheme } from '@/components/ThemeProvider';
 import {
   deleteProviderAction,
   fetchProviderBalanceAction,
@@ -222,7 +224,57 @@ export function GeneralTab({ data }: { data: SettingsData }) {
           {saved ? <span className="text-[11px] text-emerald-300">已保存</span> : null}
         </div>
       </Card>
+
+      <ThemeAppearanceCard />
     </div>
+  );
+}
+
+/** 主题外观：四套预设色板，点击即时切换（以点击位置为圆心的整页扩散动画），一键恢复默认 */
+function ThemeAppearanceCard() {
+  const { theme, choose } = useCurrentTheme();
+  return (
+    <Card title="主题外观">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {THEMES.map((preset) => (
+          <button
+            key={preset.id}
+            type="button"
+            aria-pressed={theme === preset.id}
+            aria-label={`切换到${preset.name}主题`}
+            onClick={(event) => choose(preset.id, event)}
+            className={clsx(
+              'relative overflow-hidden rounded-xl border p-3 text-left transition-colors',
+              theme === preset.id ? 'border-pink-400/60 bg-white/5' : 'border-ink-600 hover:border-pink-400/40',
+            )}
+          >
+            <span
+              className="flex h-12 items-center gap-1.5 rounded-lg border border-white/5 p-2"
+              style={{ background: preset.swatch[0] }}
+            >
+              <span className="size-4 shrink-0 rounded-full" style={{ background: preset.swatch[1] }} aria-hidden="true" />
+              <span className="h-1.5 flex-1 rounded-full" style={{ background: preset.swatch[1], opacity: 0.35 }} aria-hidden="true" />
+            </span>
+            <span className="mt-2 block text-xs font-medium text-slate-200">{preset.name}</span>
+            <span className="block text-[11px] leading-4 text-slate-500">{preset.desc}</span>
+            {theme === preset.id ? (
+              <span className="absolute right-2 top-2 flex size-5 items-center justify-center rounded-full bg-pink-500/20 text-[11px] text-pink-200" aria-hidden="true">✓</span>
+            ) : null}
+          </button>
+        ))}
+      </div>
+      <div className="mt-4 flex flex-wrap items-center gap-3">
+        <Button
+          variant="ghost"
+          onClick={(event) => choose('sakura', event)}
+        >
+          恢复默认主题（樱花）
+        </Button>
+        <span className="text-[11px] text-slate-500">
+          {theme ? `当前：${THEMES.find((preset) => preset.id === theme)?.name ?? '樱花'}` : '正在读取当前主题…'}；切换只改外观，不影响项目数据。
+        </span>
+      </div>
+    </Card>
   );
 }
 
