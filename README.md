@@ -1,5 +1,8 @@
 # Sakura AI Cut
 
+[![樱落生态成员](https://raw.githubusercontent.com/Guyao146/Sakura-EcoSystem-wiki/main/assets/ConnectEcoSystem.svg)](https://mcylyr.cn)
+[![已编写Wiki](https://raw.githubusercontent.com/Guyao146/Sakura-EcoSystem-wiki/main/assets/sakura-wiki.svg)](https://wiki.mcylyr.cn/)
+
 > 无限画布式 AI 短剧 / 电影生成与在线剪辑平台 · Docker 一键部署 · [Sakura-License-1.2](#-许可证)
 
 一个把「AI 剧本 → 资产生成 → 分镜运镜 → 在线剪辑」串成一条流水线的自部署应用。
@@ -40,6 +43,17 @@ docker compose up -d
 打开 <http://localhost:3000> 即可使用。容器数据持久化在 `sakura-data` 卷中。
 
 > 首次使用请先设置本地管理员密码，再到 **设置 → API 接入** 选择协议模板，填写接口地址、凭证与实际模型 ID。登录可选接入 Sakura 账号或通用 OIDC。
+
+### 网关快捷接入
+
+在 **设置 → API 接入 → 网关快捷接入** 填写已部署的网关网址与**本地调用 Key**，点击「验证并拉取配置」。网关需支持 `POST /api/integration/verify` 和 `GET /api/integration/config`（Sakura 网关 2.8.0 及后续兼容版本）。
+
+- 验证的是调用 Key 的当前权限，不是本站登录账号；仅输入网址或已登录另一个站点不能代替授权。不要填写本站密码或上游服务密钥。
+- 自动保存受该 Key 权限约束的文本模型、网关接口地址和思考能力元数据；不会导入上游密钥，也不会猜测图片或视频生成能力。已有模型路由不变，需要时在「模型路由」选择文本模型。
+- 调用 Key 和独立接入令牌加密存储，不回传给设置页面。选中已有接入后可「刷新已保存配置」，无需再输入 Key；验证时 Key 留空会保留现有值。重复接入相同网址和 Key 会复用记录。
+- 无效 Key、停用、撤销、超时或响应格式错误不会覆盖旧配置；成功返回空模型时会清空当前可用模型并提示权限不足或尚未发布模型，不把空列表当作生成能力可用。
+- 授权取消后不会退回调用 Key 绕过配置同步限制；需由有权操作的用户显式选择「重新登记接入授权」。取消接入授权或删除本站接入**不会停用模型调用 Key**，彻底禁止调用需在网关停用或删除该 Key。
+- 公网地址必须使用 HTTPS；本机 / 内网地址需显式勾选允许，且仅连接可信部署。HTTP 会明文传输凭据。拒绝元数据、链路本地等特殊地址；不跟随重定向，请填写最终部署根网址。容器内的 `localhost` 指向容器自身，请使用服务间可达的地址。
 
 ## 🪄 节点 AI 使用
 
