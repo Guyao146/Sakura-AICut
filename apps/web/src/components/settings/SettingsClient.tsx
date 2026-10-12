@@ -5,13 +5,18 @@ import clsx from 'clsx';
 import type { AppSettings } from '@sakura/db';
 import type { OidcProviderKind } from '@sakura/db';
 import type { Capability, ModelEntry, ProviderProtocol } from '@sakura/core';
+import type { GatewayConnectionSummary } from '@/lib/gateway';
 import { AboutTab, CameraTab, GeneralTab, ModelsTab, OidcTab, PromptsTab, ProvidersTab } from './SettingsTabs';
+import { EcosystemTab } from './EcosystemTab';
+import type { GrantView, PairingView } from '@/lib/ecosystem';
 
 /**
- * 设置区：API 接入 / 模型路由 / 提示词库 / 运镜库 / 第三方登录 / 通用设置 / 关于我们
+ * 设置区：API 接入 / 模型路由 / 提示词库 / 运镜库 / 第三方登录 / 生态授权 / 通用设置 / 关于我们
  */
 
 export interface SettingsData {
+  gateways: GatewayConnectionSummary[];
+  authorization: { authorized: boolean; gatewayUrl: string };
   providers: Array<{
     id: string;
     name: string;
@@ -37,6 +42,7 @@ export interface SettingsData {
   }>;
   settings: AppSettings;
   initialTab: string;
+  ecosystem: { pairings: PairingView[]; grants: GrantView[] };
 }
 
 const TABS = [
@@ -45,6 +51,7 @@ const TABS = [
   { key: 'prompts', label: '提示词库' },
   { key: 'camera', label: '运镜库' },
   { key: 'oidc', label: '第三方登录' },
+  { key: 'ecosystem', label: '生态授权' },
   { key: 'general', label: '通用设置' },
   { key: 'about', label: '关于我们' },
 ];
@@ -77,6 +84,7 @@ export function SettingsClient({ data }: { data: SettingsData }) {
         {tab === 'prompts' && <PromptsTab data={data} />}
         {tab === 'camera' && <CameraTab data={data} />}
         {tab === 'oidc' && <OidcTab data={data} />}
+        {tab === 'ecosystem' && <EcosystemTab data={data.ecosystem} />}
         {tab === 'general' && <GeneralTab data={data} />}
         {tab === 'about' && <AboutTab />}
       </section>

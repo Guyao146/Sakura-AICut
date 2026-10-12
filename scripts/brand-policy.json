@@ -72,6 +72,18 @@
   ],
   "exceptions": [
     {
+      "file": "apps/web/src/lib/server/gateway.ts",
+      "text": "const GATEWAY_PROTOCOL: ProviderProtocol = 'openai';",
+      "count": 1,
+      "reason": "沿用已有通用兼容适配器的持久化协议标识，网关接入测试验证文本请求路径"
+    },
+    {
+      "file": "apps/web/src/lib/server/gateway.ts",
+      "text": "    openai: z.object({ models: z.literal('/v1/models'), chat: z.literal('/v1/chat/completions') }),",
+      "count": 1,
+      "reason": "网关接入响应的固定技术字段，必须精确校验远端协议端点，界面不展示该标识"
+    },
+    {
       "file": "packages/core/src/types/provider.ts",
       "text": "| 'openai'",
       "count": 1,

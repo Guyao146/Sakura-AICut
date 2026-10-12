@@ -31,6 +31,7 @@ import { createCameraMoveAction, deleteCameraMoveAction } from '@/app/actions/pr
 import { deletePromptTemplateAction, savePromptTemplateAction } from '@/app/actions/prompts';
 import type { AppSettings } from '@sakura/db';
 import type { SettingsData } from './SettingsClient';
+import { GatewayConnectCard } from './GatewayConnectCard';
 
 /**
  * 设置页标签页：API 接入 / 模型路由 / 提示词库 / 运镜库 / 通用设置
@@ -618,8 +619,9 @@ export function ProvidersTab({ data }: { data: SettingsData }) {
   }
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[1fr_420px]">
-      <div className="space-y-3">
+    <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_420px]">
+      <div className="min-w-0 lg:col-span-2"><GatewayConnectCard connections={data.gateways} authorization={data.authorization} /></div>
+      <div className="min-w-0 space-y-3">
         {data.providers.length === 0 ? (
           <Empty text="还没有接入模型服务。请在右侧选择协议模板，并填写接口地址与实际模型 ID。" />
         ) : (
@@ -627,6 +629,7 @@ export function ProvidersTab({ data }: { data: SettingsData }) {
             <ProviderCardView
               key={provider.id}
               provider={provider}
+              managedGateway={data.gateways.some((item) => item.providerId === provider.id)}
               probeText={probe[provider.id] ?? ''}
               balanceText={balance[provider.id] ?? ''}
               onProbe={async () => {
@@ -712,6 +715,7 @@ export function ProvidersTab({ data }: { data: SettingsData }) {
 /** 供应商卡片 */
 function ProviderCardView({
   provider,
+  managedGateway,
   probeText,
   balanceText,
   onProbe,
@@ -721,6 +725,7 @@ function ProviderCardView({
   onDelete,
 }: {
   provider: ProviderRow;
+  managedGateway: boolean;
   probeText: string;
   balanceText: string;
   onProbe: () => void;
@@ -735,7 +740,7 @@ function ProviderCardView({
         <span className="flex items-center gap-2">
           {provider.name}
           <Badge tone={provider.enabled ? 'green' : 'default'}>{provider.enabled ? '启用' : '停用'}</Badge>
-          <Badge tone="blue">{provider.protocol}</Badge>
+          <Badge tone="blue">{PROTOCOL_LABELS[provider.protocol]}</Badge>
         </span>
       }
       extra={
@@ -743,13 +748,13 @@ function ProviderCardView({
           <Button size="sm" variant="ghost" onClick={onProbe}>
             连通检测
           </Button>
-          <Button size="sm" variant="ghost" onClick={onPullModels} title="从供应商接口拉取可用模型，填入右侧表单">
+          <Button size="sm" variant="ghost" onClick={onPullModels} disabled={managedGateway} title={managedGateway ? '请使用上方网关快捷接入刷新权限和模型' : '从供应商接口拉取可用模型，填入右侧表单'}>
             拉取模型
           </Button>
           <Button size="sm" variant="ghost" onClick={onBalance} title="查询剩余额度（仅部分供应商支持）">
             余额
           </Button>
-          <Button size="sm" variant="ghost" onClick={onEdit}>
+          <Button size="sm" variant="ghost" onClick={onEdit} disabled={managedGateway} title={managedGateway ? '请使用上方网关快捷接入管理凭据与配置' : undefined}>
             编辑
           </Button>
           <Button size="sm" variant="ghost" onClick={onDelete}>
@@ -758,20 +763,21 @@ function ProviderCardView({
         </div>
       }
     >
-      <div className="text-[11px] text-slate-500">{provider.baseUrl}</div>
+      <div className="break-all text-[11px] text-slate-500">{provider.baseUrl}</div>
+      {managedGateway ? <p className="mt-2 text-[11px] leading-5 text-slate-400">网关管理：在上方选择接入记录可刷新权限和配置；删除仅移除本站接入，不会停用网关调用 Key。</p> : null}
       <div className="mt-2 flex flex-wrap gap-1">
         {provider.models.length === 0 ? (
-          <span className="text-[11px] text-slate-600">尚未配置模型，点击「拉取模型」一键获取</span>
+          <span className="text-[11px] text-slate-600">{managedGateway ? '当前无可用模型，请在网关授予权限后刷新配置' : '尚未配置模型，点击「拉取模型」一键获取'}</span>
         ) : (
           provider.models.map((model) => {
             const price = formatPricing(model.pricing);
             return (
               <span
                 key={model.id}
-                className="inline-flex items-center gap-1 rounded-full border border-[#2b3240] bg-[#12151c] px-2 py-0.5 text-[10px] text-slate-300"
+                className="inline-flex max-w-full flex-wrap items-center gap-1 rounded-full border border-[#2b3240] bg-[#12151c] px-2 py-0.5 text-[10px] text-slate-300"
                 title={model.label}
               >
-                <span className="text-slate-400">{model.id}</span>
+                <span className="break-all text-slate-400">{model.id}</span>
                 <span className="text-slate-600">·</span>
                 <span>{CAPABILITY_LABELS[model.capability] ?? model.capability}</span>
                 {price ? <span className="font-medium text-amber-300/90">{price}</span> : null}

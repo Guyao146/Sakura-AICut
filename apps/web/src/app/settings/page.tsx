@@ -1,8 +1,11 @@
+import { gatewayAuthorizationStatus } from '@/app/actions/gateway-oauth';
+import { ecosystemView } from '@/lib/server/ecosystem';
 import { bootstrap, getAppSettings, listCustomCameraMoves, listOidcProviders, listPromptTemplates } from '@sakura/db';
 import Link from 'next/link';
 import { AppShell } from '@/components/AppShell';
 import { SettingsClient } from '@/components/settings/SettingsClient';
 import { connectedRoutesSummary } from '@/lib/server/ai';
+import { listGatewayConnections } from '@/lib/server/gateway';
 
 /**
  * 设置页：API 接入 / 模型路由 / 提示词库 / 运镜库 / 通用设置 / 关于我们
@@ -18,6 +21,7 @@ export default async function SettingsPage({
   bootstrap();
   const { tab } = await searchParams;
   const summary = connectedRoutesSummary();
+  const authorization = await gatewayAuthorizationStatus();
 
   return (
     <AppShell
@@ -33,6 +37,8 @@ export default async function SettingsPage({
     >
       <SettingsClient
         data={{
+          gateways: listGatewayConnections(),
+          authorization,
           providers: summary.providers.map((provider) => ({
             id: provider.id,
             name: provider.name,
@@ -74,6 +80,7 @@ export default async function SettingsPage({
             label: provider.label,
           })),
           settings: getAppSettings(),
+          ecosystem: ecosystemView(),
           initialTab: tab ?? 'providers',
         }}
       />

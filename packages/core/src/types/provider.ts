@@ -60,6 +60,9 @@ export interface ModelEntry {
   pricing?: { price: number; unit: string; currency?: string };
   /** 是否启用 */
   enabled?: boolean;
+  /** 远端声明的思考能力，仅作为元数据，不自动覆盖调用参数。 */
+  supportsThinking?: boolean | null;
+  thinkingLevels?: string[];
 }
 
 /** 供应商实例（API Key 加密存储于 credentialsEnc 字段） */

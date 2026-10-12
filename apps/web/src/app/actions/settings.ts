@@ -51,6 +51,7 @@ export async function saveProviderAction(input: {
     if (input.id) {
       const existing = getProvider(input.id);
       if (!existing) throw new Error('供应商不存在');
+      if (existing.credentials?.gatewayToken) throw new Error('请使用网关快捷接入管理该供应商，避免丢失接入授权');
       // 空凭证表示「不修改」，避免编辑时把已保存的 Key 清空
       const hasCredentials =
         input.credentials && Object.values(input.credentials).some((value) => (value ?? '').length > 0);
