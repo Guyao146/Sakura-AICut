@@ -56,6 +56,9 @@ function applyMigrations(db: DatabaseSync): void {
   ensureColumn(db, 'canvas_items', 'ref_id', 'TEXT');
   ensureColumn(db, 'canvas_items', 'voice_ref_media_id', 'TEXT');
   ensureColumn(db, 'canvas_items', 'variants_json', "TEXT NOT NULL DEFAULT '[]'");
+  // 兼容早期配对预览库：没有绑定地址的旧码不可消费，需重新生成。
+  ensureColumn(db, 'ecosystem_pairings', 'peer_base_url', "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, 'ecosystem_pairings', 'scope', "TEXT NOT NULL DEFAULT 'projects:read projects:create jobs:status'");
   const now = new Date().toISOString();
   db.prepare('INSERT OR REPLACE INTO migrations (id, applied_at) VALUES (?, ?)').run('0001_init', now);
 }

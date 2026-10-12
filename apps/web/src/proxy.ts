@@ -16,6 +16,9 @@ export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   if (PUBLIC_PAGES.has(pathname)) return NextResponse.next();
+  // 配对码和两端专用凭证自行鉴权；不能放开整个生态管理路径。
+  if ((pathname === '/api/ecosystem/pair' || pathname === '/api/ecosystem/revoke') && request.method === 'POST') return NextResponse.next();
+  if (pathname === '/api/ecosystem/status' && request.method === 'GET') return NextResponse.next();
   // OIDC 端点只在 GET 时公开（回调与发起都是 GET）
   if (PUBLIC_API_PREFIXES.some((prefix) => pathname.startsWith(prefix))) return NextResponse.next();
 

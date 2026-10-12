@@ -52,6 +52,14 @@ export function StepBriefPanel({ data, busy, run }: PanelProps) {
   return (
     <div className="space-y-3">
       <Card title="项目设定" extra={<Badge tone="pink">第 1 步</Badge>}>
+        {brief.provenance && <div className="mb-4 rounded-lg border border-pink-400/20 bg-pink-500/5 p-3 text-xs leading-6 text-slate-400">
+          <strong className="text-pink-300">SakuraSeeking 来源快照 · 待人工核验</strong>
+          <p>{brief.provenance.source.title}</p>
+          <p>平台：{brief.provenance.source.platform ?? '未标注'} · 来源：{brief.provenance.source.sourceName}</p>
+          <p>采集时间：{brief.provenance.source.observedAt ?? '未记录'} · {brief.provenance.source.kind === 'demo' ? '演示内容，不是真实热点' : '有来源内容'}</p>
+          {brief.provenance.source.sourceUrl && /^https?:\/\//i.test(brief.provenance.source.sourceUrl) && <a href={brief.provenance.source.sourceUrl} target="_blank" rel="noreferrer" className="text-pink-300">打开原始来源 ↗</a>}
+          <p>此联动仅传递项目设定，剧本与镜头没有通过该接口导入。未自动触发生成。</p>
+        </div>}
         <Field label="项目名称">
           <Input value={brief.name} onChange={(event) => setBrief({ ...brief, name: event.target.value })} />
         </Field>

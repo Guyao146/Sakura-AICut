@@ -63,6 +63,12 @@ export interface ProjectBrief {
   seed?: number;
   /** 补充说明（交给 Agent 的自由文本要求） */
   notes?: string;
+  /** 外部创作包的溯源快照，不等同于剧本导入或事实核验 */
+  provenance?: {
+    producer: 'SakuraSeeking'; schemaVersion: '1.0'; createdAt: string; keyword: string;
+    generator: 'template' | 'model'; reviewRequired: true;
+    source: { id: string; title: string; sourceName: string; platform?: string; sourceUrl?: string; observedAt?: string; kind: 'demo' | 'sourced' };
+  };
 }
 
 export const DEFAULT_BRIEF: ProjectBrief = {

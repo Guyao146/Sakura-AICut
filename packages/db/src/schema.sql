@@ -446,3 +446,40 @@ CREATE TABLE IF NOT EXISTS oidc_providers (
 );
 CREATE INDEX IF NOT EXISTS idx_oidc_kind_enabled ON oidc_providers(kind, enabled);
 
+-- 一次性配对：grant_id 为消费墓碑，不因删除授权而重新有效
+CREATE TABLE IF NOT EXISTS ecosystem_pairings (
+  id TEXT PRIMARY KEY,
+  code TEXT NOT NULL UNIQUE,
+  name TEXT NOT NULL,
+  peer_base_url TEXT NOT NULL,
+  scope TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  grant_id TEXT,
+  created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS ecosystem_grants (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  api_key TEXT NOT NULL UNIQUE,
+  peer_base_url TEXT NOT NULL,
+  peer_token TEXT NOT NULL,
+  scope TEXT NOT NULL,
+  paired_at TEXT NOT NULL,
+  revoked_at TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+-- API Key 只存摘要，对端令牌使用持久化密钥加密
+CREATE TABLE IF NOT EXISTS ecosystem_projects (
+  project_id TEXT PRIMARY KEY REFERENCES projects(id) ON DELETE CASCADE,
+  owner_id TEXT NOT NULL,
+  request_id TEXT,
+  UNIQUE(owner_id, request_id)
+);
+CREATE TABLE IF NOT EXISTS ecosystem_rate_limits (
+  bucket TEXT PRIMARY KEY,
+  started_at INTEGER NOT NULL,
+  count INTEGER NOT NULL
+);
+
