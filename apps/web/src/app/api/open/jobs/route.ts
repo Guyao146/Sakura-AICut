@@ -1,7 +1,10 @@
 import { NextResponse } from 'next/server';
-import { getProject } from '@sakura/db';
+import { z } from 'zod';
+import { getProject, transaction } from '@sakura/db';
 import { enqueueTimelineRender } from '@/lib/server/jobs';
-import { canAccessOpenProject, jobStatusLabel, requireOpenApiKey } from '@/lib/server/open-api';
+import { canAccessOpenProject, hasOpenScope, jobStatusLabel, requireOpenApiKey } from '@/lib/server/open-api';
+import { boundedJson, ecosystemError } from '@/lib/server/ecosystem';
+import { PeerError } from '@/lib/server/peer-http';
 
 /**
  * 开放 API：提交时间线渲染导出任务
@@ -13,20 +16,16 @@ import { canAccessOpenProject, jobStatusLabel, requireOpenApiKey } from '@/lib/s
 export const dynamic = 'force-dynamic';
 
 export async function POST(request: Request) {
-  const denied = await requireOpenApiKey(request, 'jobs:submit');
-  if (denied) return denied;
-  let body: { projectId?: unknown; includeSubtitles?: unknown; preset?: unknown } = {};
   try {
-    body = (await request.json()) as typeof body;
-  } catch {
-    // 空 / 非 JSON 请求体按缺少参数处理
-  }
-  const projectId = typeof body.projectId === 'string' ? body.projectId.trim() : '';
-  if (!projectId) return NextResponse.json({ error: 'projectId 为必填非空字符串' }, { status: 400 });
-  if (!getProject(projectId) || !canAccessOpenProject(request, projectId)) return NextResponse.json({ error: '项目不存在或不可访问' }, { status: 404 });
-  const options: { includeSubtitles?: boolean; preset?: string } = {};
-  if (typeof body.includeSubtitles === 'boolean') options.includeSubtitles = body.includeSubtitles;
-  if (typeof body.preset === 'string' && body.preset.trim()) options.preset = body.preset.trim();
-  const job = enqueueTimelineRender(projectId, options);
-  return NextResponse.json({ jobId: job.id, status: jobStatusLabel(job.status) }, { status: 201 });
+    const denied = await requireOpenApiKey(request, 'jobs:submit');
+    if (denied) return denied;
+    const input = z.object({ projectId: z.string().trim().min(1).max(200), includeSubtitles: z.boolean().optional(), preset: z.string().trim().min(1).max(100).optional() })
+      .strict().parse(await boundedJson(request, 4096));
+    const job = transaction(() => {
+      if (!hasOpenScope(request, 'jobs:submit')) throw new PeerError('授权已失效', 401);
+      if (!getProject(input.projectId) || !canAccessOpenProject(request, input.projectId)) throw new PeerError('项目不存在或不可访问', 404);
+      return enqueueTimelineRender(input.projectId, { includeSubtitles: input.includeSubtitles, preset: input.preset });
+    });
+    return NextResponse.json({ jobId: job.id, status: jobStatusLabel(job.status) }, { status: 201, headers: { 'Cache-Control': 'no-store' } });
+  } catch (error) { return ecosystemError(error); }
 }

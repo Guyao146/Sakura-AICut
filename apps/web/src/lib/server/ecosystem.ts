@@ -69,5 +69,5 @@ export async function boundedJson(request: Request, max = 65_536): Promise<unkno
 }
 export function ecosystemError(error: unknown): Response {
   return Response.json({ error: error instanceof PeerError ? error.message : error instanceof z.ZodError ? '参数或对端数据格式无效' : '生态服务暂时不可用' },
-    { status: error instanceof PeerError ? error.status : error instanceof z.ZodError ? 400 : 503, headers: { 'Cache-Control': 'no-store' } });
+    { status: error instanceof PeerError ? (error.status >= 400 && error.status <= 599 ? error.status : 502) : error instanceof z.ZodError ? 400 : 503, headers: { 'Cache-Control': 'no-store' } });
 }

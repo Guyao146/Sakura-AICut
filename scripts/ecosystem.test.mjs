@@ -81,6 +81,23 @@ test('配对码格式、到期、名称/地址绑定、一次性消费及删除�
   db.getDb().prepare('UPDATE ecosystem_pairings SET expires_at = ? WHERE id = ?').run('2000-01-01T00:00:00.000Z', expired.id);
   assert.throws(() => db.consumePairing({ ...input, code: expired.code }));
 });
+test('预览版库升级会清除明文凭证、废止旧授权、补全配对地址列', () => {
+  db.getDb().exec("DROP TABLE ecosystem_pairings; CREATE TABLE ecosystem_pairings (id TEXT PRIMARY KEY, code TEXT UNIQUE, name TEXT, expires_at TEXT, grant_id TEXT, created_at TEXT);");
+  db.getDb().prepare('INSERT INTO ecosystem_grants (id,name,kind,api_key,peer_base_url,peer_token,scope,paired_at,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)')
+    .run('legacy', '旧版', 'seeking', 'sak_live_legacy_plaintext', base, 'old-plain-token', 'projects:read', '2000', '2000', '2000');
+  db.closeDb();
+  const row = db.getDb().prepare('SELECT * FROM ecosystem_grants WHERE id = ?').get('legacy');
+  assert.equal(row.api_key.length, 64); assert.equal(row.peer_token, ''); assert.ok(row.revoked_at);
+  assert.equal(db.findActiveGrant('sak_live_legacy_plaintext'), null);
+  assert.ok(db.createPairing('SakuraSeeking', base).peerBaseUrl);
+});
+test('并发核销配对码时恰好一次成功', async () => {
+  const code = db.createPairing('SakuraSeeking', base).code;
+  const input = { code, clientName: 'SakuraSeeking', peerBaseUrl: base, peerToken };
+  const responses = await Promise.all([pair.POST(request('/api/ecosystem/pair', '', input)), pair.POST(request('/api/ecosystem/pair', '', input))]);
+  assert.deepEqual(responses.map((response) => response.status).sort(), [201, 400]);
+  assert.equal(db.listGrants().length, 1);
+});
 test('持久化限流不会因为重开数据库重置', () => {
   for (let index = 0; index < 3; index++) assert.equal(db.takeEcosystemRateLimit('test', 3, 1000), true);
   db.closeDb(); assert.equal(db.takeEcosystemRateLimit('test', 3, 1001), false);
@@ -143,6 +160,18 @@ test('AiCut 真正调用共享选题；本端/对端吊销都阻止后续调用'
   peerActive = true; const second = createGrant(); peerActive = false;
   assert.equal((await requireOpenApiKey(request('/api/open/projects', second.apiKey), 'projects:read')).status, 401);
   assert.equal(db.findActiveGrant(second.apiKey), null);
+});
+test('显式渲染权限可以提交本授权项目；静态 Key 保留无项目任务查询兼容', async () => {
+  const current = createGrant(true);
+  const project = await (await projects.POST(request('/api/open/projects', current.apiKey, { name: '渲染测试' }))).json();
+  assert.equal((await jobs.POST(request('/api/open/jobs', current.apiKey, null))).status, 400);
+  const response = await jobs.POST(request('/api/open/jobs', current.apiKey, { projectId: project.id, includeSubtitles: false }));
+  assert.equal(response.status, 201);
+  const job = db.getJob((await response.json()).jobId);
+  assert.equal(job.payload.includeSubtitles, false); assert.equal(job.status, 'pending');
+  const unattached = db.createJob({ type: 'timeline.render', payload: {} });
+  process.env.AICUT_OPEN_API_KEYS = 'static-test';
+  assert.equal((await jobRoute.GET(request('/api/open/jobs/x', 'static-test'), { params: Promise.resolve({ id: unattached.id }) })).status, 200);
 });
 test('代理仅放开专用机器端点；管理页面和动作必须登录', async () => {
   assert.equal(proxy(new NextRequest('http://localhost:3000/api/ecosystem/pair', { method: 'POST' })).headers.get('x-middleware-next'), '1');

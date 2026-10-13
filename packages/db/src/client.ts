@@ -1,4 +1,5 @@
 import { DatabaseSync } from 'node:sqlite';
+import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync } from 'node:fs';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { SCHEMA_SQL } from './schema.generated';
@@ -60,6 +61,12 @@ function applyMigrations(db: DatabaseSync): void {
   ensureColumn(db, 'ecosystem_pairings', 'peer_base_url', "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, 'ecosystem_pairings', 'scope', "TEXT NOT NULL DEFAULT 'projects:read projects:create jobs:status'");
   const now = new Date().toISOString();
+  // 预览版曾明文存凭证：废止旧授权并移除明文，不能沿用未绑定来源的授权。
+  const legacyGrants = db.prepare("SELECT id, api_key FROM ecosystem_grants WHERE api_key GLOB 'sak_live_*'").all() as Array<{ id: string; api_key: string }>;
+  for (const grant of legacyGrants) {
+    db.prepare('UPDATE ecosystem_grants SET api_key = ?, peer_token = ?, revoked_at = COALESCE(revoked_at, ?), updated_at = ? WHERE id = ?')
+      .run(createHash('sha256').update(grant.api_key).digest('hex'), '', now, now, grant.id);
+  }
   db.prepare('INSERT OR REPLACE INTO migrations (id, applied_at) VALUES (?, ?)').run('0001_init', now);
 }
 
