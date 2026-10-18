@@ -22,3 +22,15 @@ export const openProjectSchema = z.object({ name: z.string().trim().min(1).max(1
   targetDurationSec: z.number().int().min(1).max(2400).optional(), episodeCount: z.number().int().min(1).max(999).optional(),
   audience: z.string().max(500).optional(), notes: z.string().max(8000).optional(), provenance: provenanceSchema.optional(),
 }).strict().optional() }).strict();
+/** 剧本草稿导入：只接收原文、梗概与镜头节拍；人物/场景/道具由制作端人工补全 */
+export const openScreenplaySchema = z.object({
+  title: z.string().trim().min(1).max(120),
+  logline: z.string().max(500).optional(),
+  synopsis: z.string().max(6000).optional(),
+  raw: z.string().min(1).max(32_000),
+  scenes: z.array(z.object({
+    durationSec: z.number().int().min(1).max(600),
+    visual: z.string().min(1).max(800),
+    narration: z.string().min(1).max(1200),
+  }).strict()).min(1).max(20).optional(),
+}).strict();

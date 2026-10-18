@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS projects (
   brief_json TEXT NOT NULL,
   stage TEXT NOT NULL DEFAULT 'brief',
   status TEXT NOT NULL DEFAULT 'draft',
+  mode TEXT NOT NULL DEFAULT 'studio',
   cover_media_id TEXT,
   last_export_url TEXT,
   last_opened_at TEXT,
@@ -252,6 +253,27 @@ CREATE TABLE IF NOT EXISTS job_events (
 );
 CREATE INDEX IF NOT EXISTS idx_job_events ON job_events(job_id, created_at);
 
+-- Vibe 项目（主题直出模式：主题 → 视频脚本 → 动画代码 → 渲染产物）
+CREATE TABLE IF NOT EXISTS vibe_projects (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL UNIQUE,
+  topic TEXT NOT NULL DEFAULT '',
+  revision INTEGER NOT NULL DEFAULT 0,
+  active_job_id TEXT,
+  script_json TEXT,
+  code TEXT,
+  code_updated_at TEXT,
+  render_status TEXT NOT NULL DEFAULT 'idle',
+  render_error TEXT,
+  output_media_id TEXT,
+  output_url TEXT,
+  rendered_at TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_vibe_projects_render ON vibe_projects(render_status);
+
 -- Agent 计划
 CREATE TABLE IF NOT EXISTS agent_plans (
   id TEXT PRIMARY KEY,
@@ -481,5 +503,16 @@ CREATE TABLE IF NOT EXISTS ecosystem_rate_limits (
   bucket TEXT PRIMARY KEY,
   started_at INTEGER NOT NULL,
   count INTEGER NOT NULL
+);
+-- 剧本草稿导入记录：同一授权加幂等键只写一次，重复请求回读既有结果
+CREATE TABLE IF NOT EXISTS ecosystem_screenplay_imports (
+  id TEXT PRIMARY KEY,
+  grant_id TEXT NOT NULL,
+  project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  idempotency_key TEXT NOT NULL,
+  screenplay_id TEXT NOT NULL,
+  version INTEGER NOT NULL,
+  imported_at TEXT NOT NULL,
+  UNIQUE(grant_id, idempotency_key)
 );
 

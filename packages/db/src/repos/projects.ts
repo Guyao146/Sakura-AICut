@@ -12,6 +12,7 @@ interface ProjectRow {
   brief_json: string;
   stage: string;
   status: string;
+  mode?: string;
   cover_media_id: string | null;
   last_export_url: string | null;
   last_opened_at: string | null;
@@ -26,6 +27,7 @@ function mapProject(row: ProjectRow): Project {
     brief: { ...DEFAULT_BRIEF, ...brief, name: row.name },
     stage: row.stage as Project['stage'],
     status: row.status as Project['status'],
+    mode: row.mode === 'vibe' ? 'vibe' : 'studio',
     coverMediaId: row.cover_media_id,
     lastExportUrl: row.last_export_url,
     lastOpenedAt: row.last_opened_at,
@@ -49,17 +51,19 @@ export function getProject(id: string): Project | null {
 export function createProject(input: CreateProjectInput): Project {
   const now = nowIso();
   const id = `prj_${createId(12)}`;
-  const brief: ProjectBrief = { ...DEFAULT_BRIEF, ...input, name: input.name || DEFAULT_BRIEF.name };
+  const { mode = 'studio', ...briefInput } = input;
+  if (mode !== 'studio' && mode !== 'vibe') throw new Error('不支持的创作模式');
+  const brief: ProjectBrief = { ...DEFAULT_BRIEF, ...briefInput, name: input.name || DEFAULT_BRIEF.name };
   getDb()
     .prepare(
-      `INSERT INTO projects (id, name, brief_json, stage, status, created_at, updated_at)
-       VALUES (?, ?, ?, 'brief', 'draft', ?, ?)`,
+      `INSERT INTO projects (id, name, brief_json, stage, status, mode, created_at, updated_at)
+       VALUES (?, ?, ?, 'brief', 'draft', ?, ?, ?)`,
     )
-    .run(id, brief.name, toJson(brief), now, now);
+    .run(id, brief.name, toJson(brief), mode, now, now);
   return getProject(id) as Project;
 }
 
-export function updateProject(id: string, patch: { name?: string; brief?: Partial<ProjectBrief>; status?: Project['status']; stage?: Project['stage']; coverMediaId?: string | null }): Project {
+export function updateProject(id: string, patch: { name?: string; brief?: Partial<ProjectBrief>; status?: Project['status']; stage?: Project['stage']; coverMediaId?: string | null; lastExportUrl?: string | null }): Project {
   const current = getProject(id);
   if (!current) throw new Error(`项目不存在：${id}`);
 
@@ -73,6 +77,7 @@ export function updateProject(id: string, patch: { name?: string; brief?: Partia
     ...(patch.status ? { status: patch.status } : {}),
     ...(patch.stage ? { stage: patch.stage } : {}),
     ...(patch.coverMediaId !== undefined ? { cover_media_id: patch.coverMediaId } : {}),
+    ...(patch.lastExportUrl !== undefined ? { last_export_url: patch.lastExportUrl } : {}),
   });
   getDb().prepare(sql).run(...(values as never[]));
   return getProject(id) as Project;

@@ -56,10 +56,13 @@ export * from './prompt/assistant-prompts';
 export * from './prompt/templates';
 export * from './prompt/build';
 export * from './prompt/node-tools';
+export * from './prompt/vibe-prompts';
 
 // 流程
 export * from './pipeline/steps';
 export * from './pipeline/schema';
+export * from './pipeline/vibe';
+export * from './pipeline/vibe-document';
 
 // Agent
 export * from './agent/tools';

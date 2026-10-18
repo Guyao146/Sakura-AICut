@@ -13,7 +13,7 @@ import { z } from 'zod';
  * 两者命中其一即放行，动态凭证可随时在设置页吊销。
  */
 
-export type OpenScope = 'projects:read' | 'projects:create' | 'jobs:submit' | 'jobs:status';
+export type OpenScope = 'projects:read' | 'projects:create' | 'jobs:submit' | 'jobs:status' | 'screenplay:import';
 export function staticOpenKey(request: Request): boolean {
   const provided = request.headers.get('x-api-key')?.trim() ?? '';
   return Boolean(provided) && (process.env.AICUT_OPEN_API_KEYS ?? '').split(',').map((key) => key.trim()).filter(Boolean).some((key) => safeCompare(key, provided));

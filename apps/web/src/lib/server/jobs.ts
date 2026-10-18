@@ -1,7 +1,7 @@
 import type { CanvasAiInput, CanvasAiSnapshot, Job } from '@sakura/core';
 import { ASPECT_RATIOS, getCanvasNodeJobStates, isActiveJob } from '@sakura/core';
 import { createJob, getCanvasItem, getProject, listJobs, transaction, updateAsset, updateCanvasItem, updateShot } from '@sakura/db';
-import { assertCanvasAiSnapshot, routeFor } from '@sakura/pipeline';
+import { assertCanvasAiSnapshot, enqueueVibeJob, routeFor } from '@sakura/pipeline';
 
 /**
  * Web 侧任务入队：把昂贵的生成动作丢给 worker 执行
@@ -88,6 +88,18 @@ export function enqueueTimelineRender(projectId: string, options: { includeSubti
     targetId: projectId,
     stageLabel: '排队等待渲染导出',
   });
+}
+
+export function enqueueVibeScript(projectId: string, input: { topic: string; instructions?: string; autoRender?: boolean }): Job {
+  return enqueueVibeJob(projectId, 'vibe.generate', input);
+}
+
+export function enqueueVibeCode(projectId: string, instructions?: string): Job {
+  return enqueueVibeJob(projectId, 'vibe.code', { instructions });
+}
+
+export function enqueueVibeRender(projectId: string): Job {
+  return enqueueVibeJob(projectId, 'vibe.render');
 }
 
 export function enqueueQaReview(

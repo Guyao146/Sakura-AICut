@@ -83,6 +83,28 @@ jobs:
             echo 'EOF'
           } >> "$GITHUB_OUTPUT"
 
+      - name: 构建本地渲染验证镜像
+        if: matrix.target == 'worker'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile.worker
+          platforms: linux/amd64
+          load: true
+          push: false
+          tags: sakura-worker-check:local
+          cache-from: type=gha,scope=worker
+          provenance: false
+
+      - name: 发布前验证浏览器沙箱与真实视频编码
+        if: matrix.target == 'worker'
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --rm --init --network none \
+            --security-opt "seccomp=$PWD/docker/render-seccomp.json" \
+            sakura-worker-check:local ./node_modules/.bin/tsx src/vibe-smoke.ts
+
       - name: 构建并发布 ${{ matrix.target }}
         uses: docker/build-push-action@v6
         with:
@@ -109,7 +131,12 @@ jobs:
           name="sakura-smoke-$TARGET"
           trap 'docker logs "$name"; docker rm -fv "$name" >/dev/null' EXIT
           docker pull --platform linux/amd64 "$image"
-          docker run -d --platform linux/amd64 --name "$name" "$image"
+          if [[ "$TARGET" == "worker" ]]; then
+            docker run -d --init --platform linux/amd64 --name "$name" \
+              --security-opt "seccomp=$PWD/docker/render-seccomp.json" "$image"
+          else
+            docker run -d --platform linux/amd64 --name "$name" "$image"
+          fi
           for attempt in $(seq 1 40); do
             if [[ "$TARGET" == "web" ]]; then
               if docker exec "$name" node -e "fetch('http://127.0.0.1:3000/login',{redirect:'manual'}).then(r=>process.exit(r.status===200?0:1)).catch(()=>process.exit(1))"; then

@@ -58,7 +58,7 @@ export function StepBriefPanel({ data, busy, run }: PanelProps) {
           <p>平台：{brief.provenance.source.platform ?? '未标注'} · 来源：{brief.provenance.source.sourceName}</p>
           <p>采集时间：{brief.provenance.source.observedAt ?? '未记录'} · {brief.provenance.source.kind === 'demo' ? '演示内容，不是真实热点' : '有来源内容'}</p>
           {brief.provenance.source.sourceUrl && /^https?:\/\//i.test(brief.provenance.source.sourceUrl) && <a href={brief.provenance.source.sourceUrl} target="_blank" rel="noreferrer" className="text-pink-300">打开原始来源 ↗</a>}
-          <p>此联动仅传递项目设定，剧本与镜头没有通过该接口导入。未自动触发生成。</p>
+          <p>创建项目时仅传递设定与来源。剧本草稿需单独授权并确认导入，导入后仍待人工审核；不自动创建制作镜头或触发生成。</p>
         </div>}
         <Field label="项目名称">
           <Input value={brief.name} onChange={(event) => setBrief({ ...brief, name: event.target.value })} />

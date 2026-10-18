@@ -1,17 +1,19 @@
 {
   "name": "@sakura/worker",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "start": "tsx src/index.ts",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test:render": "tsx src/vibe-smoke.ts"
   },
   "dependencies": {
     "@sakura/core": "workspace:*",
     "@sakura/db": "workspace:*",
-    "@sakura/pipeline": "workspace:*"
+    "@sakura/pipeline": "workspace:*",
+    "playwright": "^1.64.0"
   },
   "devDependencies": {
     "@types/node": "^26.5.1",

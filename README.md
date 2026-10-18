@@ -103,7 +103,7 @@ pnpm dev             # 同时启动 web(3000) 与 worker
 
 ### SakuraSeeking 配对与连接管理
 
-登录后在「设置 → 生态授权」填写应用名称及对端最终服务地址，生成一次性 6 位配对码（10 分钟有效）。在 Seeking「连接与授权」输入相同名称/地址及配对码，确认交换凭证。默认 scope 为 `projects:read projects:create jobs:status`，额外勾选才授予 `jobs:submit`；权限实际由各端点执行，不会自动提交渲染或调用模型。
+登录后在「设置 → 生态授权」填写应用名称及对端最终服务地址，生成一次性 6 位配对码（10 分钟有效）。在 Seeking「连接与授权」输入相同名称/地址及配对码，确认交换凭证。默认 scope 为 `projects:read projects:create jobs:status`，`jobs:submit`（提交渲染）和 `screenplay:import`（导入剧本草稿）分别勾选才授予，默认均关闭。已配对应用可点击「允许导入剧本」或「停止剧本导入」即时调整，无需重新配对；Seeking 点击「验证连接」可刷新权限显示。权限实际由各端点执行，不会自动提交渲染或调用模型。
 
 配对入口 `POST /api/ecosystem/pair` 接收 `{code, clientName, kind?, peerBaseUrl, peerToken}`，返回 `{grantId, name, apiKey, scope, capabilities, reverseScope}`，仅此握手返回 Key。AiCut 只保存 Key 摘要，对端令牌用持久化密钥加密；设置页面不接收任何凭证。无会话的调用仅放行配对码核销和专用凭证的状态/撤销端点，不放开管理操作。
 
@@ -119,13 +119,25 @@ pnpm dev             # 同时启动 web(3000) 与 worker
 | --- | --- | --- |
 | GET | `/api/open/projects?limit=n` | 项目列表 `{ projects: [{ id, name, updatedAt }] }` |
 | POST | `/api/open/projects` | 创建项目，body `{name, brief?}` → `{id, name, imported: false, reviewRequired: true}`；可带 `Idempotency-Key` 防重复 |
+| POST | `/api/open/projects/[id]/screenplay` | 单独授权的剧本草稿导入，必须带 `Idempotency-Key`；首次 201、同项目重放 200，始终 `reviewRequired: true` |
 | GET | `/api/open/projects/[id]` | 关联项目阶段、状态与最近任务摘要（有 `jobs:status` 才返回任务） |
 | POST | `/api/open/jobs` | 提交时间线导出，body `{ projectId, includeSubtitles?, preset? }` → `{ jobId, status }`（缺省 `includeSubtitles=true`、`preset=vertical-1080p`） |
 | GET | `/api/open/jobs/[id]` | 任务状态 `{ jobId, status, error? }`，status 为可读字符串（排队 / 运行中 / 成功 / 失败 / 已取消） |
 
-所有响应均为 JSON；出错时返回 `{ "error": "..." }`（401 未授权 / 403 权限不足 / 400 参数错误 / 404 不存在或不可访问 / 429 限流 / 503 无法验证对端）。
+所有响应均为 JSON；出错时返回 `{ "error": "..." }`（401 未授权 / 403 权限不足 / 400 参数错误 / 404 不存在或不可访问 / 409 已有剧本、阶段或幂等冲突 / 413 请求体超限 / 429 限流 / 503 无法验证对端）。
 
-`brief` 严格白名单：`logline, genres, style, aspectRatio, language, targetDurationSec, episodeCount, audience, notes, provenance`。不接受字符串伪装的数值或非法枚举。结构化 `provenance` 保存生产方、版本、生成时间、关键词、生成方式、`reviewRequired: true` 及来源快照；真实来源必须有 HTTP(S) URL 与采集时间，平台标识只作为来源数据保存。项目设定面板可查看溯源。**没有剧本导入接口**，不会编造景别、人物卡或声称已导入。
+`brief` 严格白名单：`logline, genres, style, aspectRatio, language, targetDurationSec, episodeCount, audience, notes, provenance`。不接受字符串伪装的数值或非法枚举。结构化 `provenance` 保存生产方、版本、生成时间、关键词、生成方式、`reviewRequired: true` 及来源快照；真实来源必须有 HTTP(S) URL 与采集时间，平台标识只作为来源数据保存。项目设定面板可查看溯源。**创建项目本身不导入剧本**；剧本草稿使用下述独立端点，不编造景别或人物卡。
+
+#### 剧本草稿导入（待人工审核）
+
+`POST /api/open/projects/[id]/screenplay` 需要动态授权的 `screenplay:import` scope；静态 Key 保持全局权限，也可调用，但同样不能覆盖已有剧本。Seeking 必须先关联项目，再由用户点击「导入剧本草稿」并确认，不会因配对或创建项目自动执行。
+
+- 正文白名单：`title`（1–120 字符）、`raw`（1–32000 字符）、可选 `logline`（最多 500）、`synopsis`（最多 6000）、`scenes`（1–20 项）。每项仅有 `durationSec`（1–600 的整数）、`visual`（1–800）、`narration`（1–1200）。拒绝未知字段和数值字符串；UTF-8 请求体最多 65536 字节。
+- `Idempotency-Key` 必填，1–160 个字母、数字、下划线、冒号或连字符。同一授权下首次导入返回 201；同一项目重放返回原导入记录和 200，不采用重放的新正文；同键跨项目返回 409。重试仍需有效权限；降权返回 403，吊销返回 401。
+- 只接受无剧本、阶段为 `brief` 或 `script` 的项目。已有剧本或进入 `assets` / `shots` / `edit` / `done` 时，新导入返回 409，不覆盖人工工作。成功记录的重放不会覆盖后续改稿或改变阶段。
+- 原子写入当前剧本、一个版本快照及幂等记录。人物、场景、道具数组为空；`scenes` 仅映射为故事节拍，不创建素材卡、制作镜头或任务，不调用模型、不渲染。存储来源为 `manual`，版本标题注明 SakuraSeeking 与「待人工审核」。导入原文保留生成方式与来源说明，不代表人工已经审核通过。
+- 返回 `{id, screenplayId, version, importedAt, imported: true, reviewRequired: true, repeated}`。`importedAt` 为首次导入时间，重试保持不变；导入记录不是当前制作完成状态。开启/关闭权限不删除已有剧本或版本。
+- 全局持久化导入限流为 20 次/分钟。两端应同时升级；旧版不支持此端点时请复制或导出后人工整理。数据库会自动补建导入记录表，升级前仍需备份数据库及持久化密钥。
 
 curl 示例：
 

@@ -19,3 +19,5 @@ export * from './screenplay';
 export * from './node-tools';
 export * from './redraw';
 export * from './qa';
+export * from './vibe-generation';
+export * from './vibe-jobs';

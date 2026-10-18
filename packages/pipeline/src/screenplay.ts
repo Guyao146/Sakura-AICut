@@ -23,11 +23,13 @@ export interface SaveVersionInput {
   source?: ScreenplayVersion['source'];
 }
 
-function snapshotDataJson(screenplay: Screenplay | null): string {
+/** 版本快照保留结构化字段；草稿导入也复用同一形状 */
+export function screenplaySnapshotJson(screenplay: Screenplay | null): string {
   return JSON.stringify(
     screenplay
       ? {
           title: screenplay.title,
+          logline: screenplay.logline,
           characters: screenplay.characters,
           locations: screenplay.locations,
           props: screenplay.props,
@@ -66,7 +68,7 @@ export function saveScreenplayVersion(input: SaveVersionInput): ScreenplayVersio
     projectId: input.projectId,
     title: input.title || `v · ${new Date().toLocaleString('zh-CN')}`,
     raw: screenplay?.raw ?? input.raw ?? '',
-    dataJson: snapshotDataJson(screenplay),
+    dataJson: screenplaySnapshotJson(screenplay),
     source: input.source ?? 'ai',
   });
 }
@@ -103,4 +105,43 @@ export function rollbackToVersion(versionId: string): ScreenplayVersion {
     dataJson: version.dataJson,
     source: 'rollback',
   });
+}
+
+/**
+ * 外部创作包的剧本草稿：只携带原文、梗概和镜头节拍。
+ * 人物卡、场景卡、道具卡在创作包中不存在，保持为空，由制作端人工补全；
+ * 不编造景别、运镜或镜头参数，也不创建制作镜头。
+ */
+export interface ImportedScene {
+  durationSec: number;
+  visual: string;
+  narration: string;
+}
+export function buildScreenplayDraft(input: {
+  title: string;
+  logline?: string;
+  synopsis?: string;
+  raw: string;
+  scenes?: ImportedScene[];
+}): Omit<Screenplay, 'id' | 'projectId' | 'createdAt' | 'updatedAt'> {
+  return {
+    title: input.title.trim().slice(0, 120),
+    logline: input.logline ?? '',
+    synopsis: input.synopsis ?? '',
+    characters: [],
+    locations: [],
+    props: [],
+    beats: (input.scenes ?? []).map((scene, index) => ({
+      id: `beat_import_${index}`,
+      index,
+      title: `镜头 ${index + 1}`,
+      summary: `画面：${scene.visual}\n旁白：${scene.narration}`,
+      mood: '',
+      durationSec: scene.durationSec,
+      locationId: null,
+      characterIds: [],
+    })),
+    raw: input.raw,
+    source: 'manual',
+  };
 }

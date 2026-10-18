@@ -16,6 +16,7 @@ import {
   submitShotVideo,
 } from '@sakura/pipeline';
 import { runAgentPlan } from './agent-runner';
+import { handleVibeJob } from './vibe-handler';
 
 /**
  * 任务处理器：每种 JobType 对应一个执行函数
@@ -376,4 +377,7 @@ export const HANDLERS: Record<string, Handler> = {
   'text.generate': handleTextGenerate,
   'provider.probe': handleProviderProbe,
   'qa.review': handleQaReview,
+  'vibe.generate': handleVibeJob,
+  'vibe.code': handleVibeJob,
+  'vibe.render': handleVibeJob,
 };

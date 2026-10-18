@@ -82,7 +82,7 @@ export function ProjectLibrary({ projects }: { projects: Project[] }) {
                       <rect x="3" y="4" width="18" height="16" rx="3" /><path d="M3 9h18M8 4v5m8-5v5m-6 4 5 3-5 3z" />
                     </svg>
                   </span>
-                  <span className="relative mr-9"><Badge tone={project.status === 'completed' ? 'green' : 'default'}>{project.status === 'archived' ? '已归档' : STAGES[project.stage] ?? project.stage}</Badge></span>
+                  <span className="relative mr-9"><Badge tone={project.status === 'completed' ? 'green' : 'default'}>{project.status === 'archived' ? '已归档' : project.mode === 'vibe' ? `Vibe · ${project.status === 'completed' ? '已成片' : project.status === 'rendering' ? '渲染中' : '创作中'}` : STAGES[project.stage] ?? project.stage}</Badge></span>
                 </div>
                 <h3 className="truncate text-sm font-semibold text-slate-100">{project.brief.name}</h3>
                 <p className="mt-2 line-clamp-2 min-h-10 break-words text-xs leading-5 text-slate-400">{project.brief.logline || '还没有故事梗概，进入工作室继续构思。'}</p>

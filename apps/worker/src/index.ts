@@ -14,6 +14,7 @@ import {
 } from '@sakura/db';
 import { redactUrl } from '@sakura/core/server';
 import { HANDLERS } from './handlers';
+import { closeVibeBrowser } from './vibe-render';
 
 /**
  * Sakura AI Cut Worker
@@ -70,7 +71,9 @@ async function runJob(jobId: string): Promise<void> {
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-  const failed = getJob(jobId)?.status === 'canceled' ? null : failJob(jobId, message);
+    const latest = getJob(jobId);
+    const staleVibeAttempt = job.type.startsWith('vibe.') && (latest?.attempts !== job.attempts || latest.status === 'pending');
+    const failed = latest?.status === 'canceled' || staleVibeAttempt ? null : failJob(jobId, message);
     addJobEvent(jobId, 'error', redactMessage(message));
     log(`任务失败 ${job.type} ${jobId}：${message}`);
     if (failed && failed.status === 'pending') {
@@ -118,6 +121,7 @@ async function main(): Promise<void> {
       addJobEvent(jobId, 'warn', '进程关闭中断执行，任务已重新排队，重启后自动恢复');
     }
     for (const controller of running.values()) controller.abort();
+    void closeVibeBrowser();
     const waitTimer = setInterval(() => {
       if (running.size === 0 || !shuttingDown) {
         clearInterval(waitTimer);

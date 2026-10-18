@@ -114,6 +114,8 @@ export const imagePromptSchema = z.object({
   negativePrompt: z.string().optional().default(''),
 });
 
+export { vibeScriptSchema, type VibeScriptDraft } from './vibe';
+
 export type ScreenplayDraft = z.infer<typeof screenplaySchema>;
 export type StoryboardDraft = z.infer<typeof storyboardSchema>;
 export type AssetPlanDraft = z.infer<typeof assetPlanSchema>;

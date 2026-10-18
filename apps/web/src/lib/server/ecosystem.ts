@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { cookies } from 'next/headers';
-import { cancelPairing, createPairing, deleteGrant, getPeer, listActivePairings, listGrants, purgeExpiredPairings, revokeGrant, takeEcosystemRateLimit } from '@sakura/db';
+import { cancelPairing, createPairing, deleteGrant, getPeer, listActivePairings, listGrants, purgeExpiredPairings, revokeGrant, SCREENPLAY_IMPORT_SCOPE, setGrantScope, takeEcosystemRateLimit } from '@sakura/db';
 import { SESSION_COOKIE, verifySessionToken } from '@/lib/session';
 import type { GrantView, PairingView, SharedTopicView } from '@/lib/ecosystem';
 import { normalizePeerUrl, peerJson, PeerError } from './peer-http';
@@ -12,10 +12,19 @@ export function ecosystemView(): { pairings: PairingView[]; grants: GrantView[] 
   return { pairings: listActivePairings(), grants: listGrants(true) };
 }
 export function generateEcosystemPairing(input: unknown): PairingView {
-  const data = z.object({ name: z.string().trim().min(1).max(80), peerBaseUrl: z.string().min(1).max(2048), allowRender: z.boolean().default(false) }).strict().parse(input);
+  const data = z.object({ name: z.string().trim().min(1).max(80), peerBaseUrl: z.string().min(1).max(2048),
+    allowRender: z.boolean().default(false), allowScreenplayImport: z.boolean().default(false) }).strict().parse(input);
   if (!takeEcosystemRateLimit('manage', 10)) throw new PeerError('生成配对码过于频繁', 429);
   purgeExpiredPairings();
-  return createPairing(data.name, normalizePeerUrl(data.peerBaseUrl), data.allowRender);
+  return createPairing(data.name, normalizePeerUrl(data.peerBaseUrl), data.allowRender, data.allowScreenplayImport);
+}
+/** 既有授权增减剧本导入权限；不必重新配对，立即对后续请求生效 */
+export function setEcosystemScreenplayImport(id: string, enabled: boolean): void {
+  const grant = listGrants().find((item) => item.id === id);
+  if (!grant) throw new PeerError('授权不存在或已吊销', 404);
+  const scopes = grant.scope.split(' ');
+  if (scopes.includes(SCREENPLAY_IMPORT_SCOPE) === enabled) return;
+  setGrantScope(id, enabled ? [...scopes, SCREENPLAY_IMPORT_SCOPE] : scopes.filter((scope) => scope !== SCREENPLAY_IMPORT_SCOPE));
 }
 export async function disconnectEcosystem(id: string): Promise<{ notified: boolean }> {
   const peer = getPeer(id, true);

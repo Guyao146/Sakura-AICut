@@ -34,6 +34,10 @@ services:
   worker:
     image: ghcr.io/guyao146/sakura-aicut-worker:latest
     container_name: sakura-worker
+    init: true
+    shm_size: '256mb'
+    security_opt:
+      - seccomp=./docker/render-seccomp.json
     restart: unless-stopped
     pull_policy: missing
     environment:

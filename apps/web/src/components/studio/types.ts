@@ -14,6 +14,7 @@ import type {
   Shot,
   Timeline,
   CameraMoveTemplate,
+  VibeProject,
 } from '@sakura/core';
 
 /**
@@ -23,6 +24,8 @@ import type {
 export interface StudioData {
   project: Project;
   jobs: Job[];
+  /** Vibe 模式数据（仅 mode='vibe' 时存在） */
+  vibe: VibeProject | null;
   screenplay: Screenplay | null;
   /** ⑧ 剧本版本（最新在前） */
   screenplayVersions: ScreenplayVersion[];

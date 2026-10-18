@@ -353,7 +353,12 @@ export function cancelJob(id: string): Job | null {
   getDb()
     .prepare(`UPDATE jobs SET status = 'canceled', finished_at = ?, updated_at = ? WHERE id = ? AND status IN ('pending','running','queued')`)
     .run(now, now, id);
-  return getJob(id);
+  const result = getJob(id);
+  if (result?.status === 'canceled' && result.type.startsWith('vibe.') && result.projectId) {
+    getDb().prepare(`UPDATE vibe_projects SET render_status = 'canceled', render_error = NULL, updated_at = ?
+      WHERE project_id = ? AND active_job_id = ?`).run(now, result.projectId, result.id);
+  }
+  return result;
 }
 
 /**

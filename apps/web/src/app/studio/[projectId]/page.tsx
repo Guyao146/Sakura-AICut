@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import {
   bootstrap,
   getProjectWithContent,
+  getVibeProject,
   listChatMessages,
   listCustomCameraMoves,
   listMedia,
@@ -20,9 +21,10 @@ import {
 } from '@sakura/db';
 import { connectedRoutesSummary } from '@/lib/server/ai';
 import StudioClient from '@/components/studio/StudioClient';
+import { VibeStudio } from '@/components/studio/VibeStudio';
 
 /**
- * 无限画布工作台（第 1-5 步都在这个页面完成）
+ * 无限画布工作台（第 1-5 步都在这个页面完成；Vibe 模式走主题直出工作台）
  */
 export const dynamic = 'force-dynamic';
 
@@ -38,6 +40,16 @@ export default async function StudioPage({ params }: { params: Promise<{ project
   }
 
   touchProject(projectId);
+
+  // Vibe 模式：独立的主题直出工作台，不加载五步流程数据
+  if (content.project.mode === 'vibe') {
+    const vibe = getVibeProject(projectId);
+    const jobs = [...new Map([
+      ...listJobs({ projectId, limit: 40 }),
+      ...listJobs({ projectId, status: ['pending', 'queued', 'running'], limit: -1 }),
+    ].map((job) => [job.id, job])).values()];
+    return <VibeStudio key={projectId} data={{ project: content.project, jobs, vibe }} />;
+  }
 
   const mediaList = listMedia(projectId);
   const media = Object.fromEntries(mediaList.map((item) => [item.id, item]));
@@ -65,6 +77,7 @@ export default async function StudioPage({ params }: { params: Promise<{ project
       data={{
         project: content.project,
         jobs,
+        vibe: null,
         screenplay: content.screenplay,
         screenplayVersions,
         assets: content.assets,

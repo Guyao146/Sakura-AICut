@@ -15,13 +15,15 @@ const db = await import('../packages/db/src/index.ts');
 const pair = await import('../apps/web/src/app/api/ecosystem/pair/route.ts');
 const projects = await import('../apps/web/src/app/api/open/projects/route.ts');
 const projectRoute = await import('../apps/web/src/app/api/open/projects/[id]/route.ts');
+const screenplayRoute = await import('../apps/web/src/app/api/open/projects/[id]/screenplay/route.ts');
+const ecosystemStatus = await import('../apps/web/src/app/api/ecosystem/status/route.ts');
 const jobs = await import('../apps/web/src/app/api/open/jobs/route.ts');
 const jobRoute = await import('../apps/web/src/app/api/open/jobs/[id]/route.ts');
 const { requireOpenApiKey } = await import('../apps/web/src/lib/server/open-api.ts');
-const { disconnectEcosystem, readPeerTopics } = await import('../apps/web/src/lib/server/ecosystem.ts');
+const { disconnectEcosystem, readPeerTopics, setEcosystemScreenplayImport } = await import('../apps/web/src/lib/server/ecosystem.ts');
 const { normalizePeerUrl, peerJson, validatePeerAddress } = await import('../apps/web/src/lib/server/peer-http.ts');
 const { proxy } = await import('../apps/web/src/proxy.ts');
-const { createPairingAction } = await import('../apps/web/src/app/actions/ecosystem.ts');
+const { createPairingAction, setScreenplayImportAction } = await import('../apps/web/src/app/actions/ecosystem.ts');
 const { createSessionToken } = await import('../apps/web/src/lib/session.ts');
 let base;
 let grant;
@@ -54,11 +56,90 @@ after(async () => {
 function request(path, key = '', body) {
   return new Request(`http://localhost:3000${path}`, { method: body === undefined ? 'GET' : 'POST', headers: { 'X-API-Key': key, 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) });
 }
-function createGrant(allowRender = false) {
-  const code = db.createPairing('SakuraSeeking', base, allowRender).code;
+function createGrant(allowRender = false, allowScreenplayImport = false) {
+  const code = db.createPairing('SakuraSeeking', base, allowRender, allowScreenplayImport).code;
   grant = db.consumePairing({ code, clientName: 'SakuraSeeking', kind: 'seeking', peerBaseUrl: base, peerToken });
   return grant;
 }
+
+const screenplayInput = { title: '待审核的剧本', logline: '保留用户提供的故事', synopsis: '草稿梗概', raw: 'SakuraSeeking 剧本原文 · 待人工审核',
+  scenes: [{ durationSec: 15, visual: '原有画面描述', narration: '原有旁白' }, { durationSec: 10, visual: '收尾画面', narration: '收尾旁白' }] };
+function linkedProject(current, name = '剧本导入测试') {
+  const project = db.createProject({ name }); db.linkEcosystemProject(project.id, current.id); return project;
+}
+function importDraft(id, key, requestId = 'screenplay-once', body = screenplayInput) {
+  const req = request(`/api/open/projects/${id}/screenplay`, key, body);
+  if (requestId !== null) req.headers.set('Idempotency-Key', requestId);
+  return screenplayRoute.POST(req, { params: Promise.resolve({ id }) });
+}
+
+test('剧本导入默认关闭，可在原授权单独开关，白名单和吊销限制生效', async () => {
+  const current = createGrant(); const project = linkedProject(current);
+  assert.equal(current.scope.includes('screenplay:import'), false);
+  assert.equal((await importDraft(project.id, current.apiKey)).status, 403);
+  assert.equal(db.getScreenplay(project.id), null);
+  setEcosystemScreenplayImport(current.id, true); setEcosystemScreenplayImport(current.id, true);
+  const status = await ecosystemStatus.GET(request('/api/ecosystem/status', current.apiKey)).json();
+  assert.equal(status.scope.split(' ').filter((scope) => scope === 'screenplay:import').length, 1);
+  assert.equal(status.scope.includes('jobs:submit'), false);
+  assert.equal((await importDraft(project.id, current.apiKey)).status, 201);
+  setEcosystemScreenplayImport(current.id, false);
+  assert.equal((await importDraft(project.id, current.apiKey)).status, 403);
+  assert.ok(db.getScreenplay(project.id));
+  assert.throws(() => db.setGrantScope(current.id, ['unsupported:scope']));
+  assert.throws(() => db.setGrantScope(current.id, []));
+  db.revokeGrant(current.id);
+  assert.throws(() => setEcosystemScreenplayImport(current.id, true));
+  assert.throws(() => db.setGrantScope(current.id, ['screenplay:import']));
+});
+
+test('显式导入落一版待审核草稿，仅节拍不造人物、场景、道具或制作镜头', async () => {
+  const current = createGrant(false, true); const project = linkedProject(current);
+  const response = await importDraft(project.id, current.apiKey); assert.equal(response.status, 201);
+  assert.equal(response.headers.get('cache-control'), 'no-store');
+  const result = await response.json();
+  assert.equal(result.id, project.id); assert.equal(result.version, 1); assert.equal(result.reviewRequired, true); assert.equal(result.imported, true); assert.equal(result.repeated, false);
+  const screenplay = db.getScreenplay(project.id);
+  assert.equal(screenplay.id, result.screenplayId); assert.equal(screenplay.raw, screenplayInput.raw); assert.equal(screenplay.source, 'manual');
+  assert.equal(screenplay.logline, screenplayInput.logline); assert.equal(screenplay.synopsis, screenplayInput.synopsis);
+  assert.deepEqual(screenplay.characters, []); assert.deepEqual(screenplay.locations, []); assert.deepEqual(screenplay.props, []);
+  assert.equal(screenplay.beats.length, screenplayInput.scenes.length);
+  for (const [index, beat] of screenplay.beats.entries()) {
+    assert.equal(beat.durationSec, screenplayInput.scenes[index].durationSec);
+    assert.equal(beat.summary, `画面：${screenplayInput.scenes[index].visual}\n旁白：${screenplayInput.scenes[index].narration}`);
+    assert.deepEqual(beat.characterIds, []); assert.equal(beat.locationId, null); assert.equal(beat.mood, '');
+  }
+  const versions = db.listScreenplayVersions(project.id); assert.equal(versions.length, 1);
+  assert.match(versions[0].title, /待人工审核/); assert.equal(versions[0].source, 'manual');
+  const snapshot = JSON.parse(versions[0].dataJson); assert.equal(snapshot.logline, screenplayInput.logline); assert.deepEqual(snapshot.beats, screenplay.beats);
+  for (const table of ['assets', 'shots', 'jobs']) {
+    assert.equal(db.getDb().prepare(`SELECT COUNT(*) AS count FROM ${table} WHERE project_id = ?`).get(project.id).count, 0);
+  }
+  assert.equal(db.findScreenplayImport(current.id, 'screenplay-once').importedAt, result.importedAt);
+});
+
+test('同一导入幂等重放返回 200，后续人工改稿或进入后期也不会覆盖', async () => {
+  const current = createGrant(false, true); const project = linkedProject(current);
+  const first = await (await importDraft(project.id, current.apiKey)).json();
+  const screenplay = db.getScreenplay(project.id);
+  db.upsertScreenplay(project.id, { ...screenplay, raw: '制作端人工修订，不能覆盖' });
+  db.updateProject(project.id, { stage: 'edit' });
+  const response = await importDraft(project.id, current.apiKey, 'screenplay-once', { ...screenplayInput, raw: '重复请求的新正文' });
+  assert.equal(response.status, 200); assert.deepEqual(await response.json(), { ...first, repeated: true });
+  assert.equal(db.getScreenplay(project.id).raw, '制作端人工修订，不能覆盖'); assert.equal(db.listScreenplayVersions(project.id).length, 1);
+  assert.equal((await importDraft(project.id, current.apiKey, 'new-attempt')).status, 409);
+});
+
+test('已有剧本即使在初期也返回 409，已有版本与正文完整保留', async () => {
+  const current = createGrant(false, true); const project = linkedProject(current);
+  db.updateProject(project.id, { stage: 'script' });
+  db.upsertScreenplay(project.id, { title: '人工原稿', logline: '', synopsis: '', raw: '不可覆盖', source: 'manual', characters: [], locations: [], props: [], beats: [] });
+  const original = db.getScreenplay(project.id);
+  const response = await importDraft(project.id, current.apiKey);
+  assert.equal(response.status, 409); assert.match((await response.json()).error, /已有剧本/);
+  assert.deepEqual(db.getScreenplay(project.id), original); assert.equal(db.listScreenplayVersions(project.id).length, 0);
+  assert.equal(db.findScreenplayImport(current.id, 'screenplay-once'), null);
+});
 
 test('新库迁移、密钥摘要与对端令牌加密，重开数据库仍可鉴权', () => {
   const current = createGrant();
@@ -178,8 +259,88 @@ test('代理仅放开专用机器端点；管理页面和动作必须登录', as
   assert.equal(proxy(new NextRequest('http://localhost:3000/api/ecosystem/manage')).status, 401);
   assert.equal(proxy(new NextRequest('http://localhost:3000/settings')).status, 307);
   assert.equal(proxy(new NextRequest('http://localhost:3000/settings', { headers: { Cookie: `sakura_session=${createSessionToken()}` } })).headers.get('x-middleware-next'), '1');
-  assert.equal((await createPairingAction({ name: 'SakuraSeeking', peerBaseUrl: base, allowRender: false })).ok, false);
+  assert.equal(proxy(new NextRequest('http://localhost:3000/api/open/projects/prj_test/screenplay', { method: 'POST' })).headers.get('x-middleware-next'), '1');
+  assert.equal((await setScreenplayImportAction({ id: 'grant_test', enabled: true })).ok, false);
+  assert.equal((await createPairingAction({ name: 'SakuraSeeking', peerBaseUrl: base, allowRender: false, allowScreenplayImport: false })).ok, false);
 });
+test('导入拒绝后期项目、跨项目幂等键及其他授权项目', async () => {
+  const current = createGrant(false, true); const first = linkedProject(current); const second = linkedProject(current);
+  assert.equal((await importDraft(first.id, current.apiKey, 'shared-key')).status, 201);
+  assert.equal((await importDraft(second.id, current.apiKey, 'shared-key')).status, 409);
+  assert.equal(db.getScreenplay(second.id), null);
+  for (const stage of ['assets', 'shots', 'edit', 'done']) {
+    const project = linkedProject(current); db.updateProject(project.id, { stage });
+    assert.equal((await importDraft(project.id, current.apiKey, `stage-${stage}`)).status, 409);
+    assert.equal(db.getScreenplay(project.id), null);
+  }
+  const other = db.createProject({ name: '非本授权项目' });
+  assert.equal((await importDraft(other.id, current.apiKey, 'foreign')).status, 404);
+  assert.equal((await importDraft(first.id, '', 'unauthorized')).status, 401);
+  db.updateProject(second.id, { stage: 'script' });
+  assert.equal((await importDraft(second.id, current.apiKey, 'empty-script-stage')).status, 201);
+});
+
+test('导入正文严格校验、大小限制和幂等键必填，不接受伪造镜头字段', async () => {
+  const current = createGrant(false, true); const project = linkedProject(current);
+  for (const key of [null, '', 'invalid key', 'x'.repeat(161)]) assert.equal((await importDraft(project.id, current.apiKey, key)).status, 400);
+  for (const body of [
+    { ...screenplayInput, raw: '' }, { ...screenplayInput, characters: [{ name: '不存在的人物卡' }] },
+    { ...screenplayInput, scenes: [{ ...screenplayInput.scenes[0], durationSec: '15' }] },
+    { ...screenplayInput, scenes: [{ ...screenplayInput.scenes[0], camera: '虚构参数' }] },
+  ]) assert.equal((await importDraft(project.id, current.apiKey, 'invalid', body)).status, 400);
+  assert.equal((await importDraft(project.id, current.apiKey, 'large', { ...screenplayInput, raw: '字'.repeat(32_000) })).status, 413);
+  assert.equal(db.getScreenplay(project.id), null);
+});
+
+test('导入写入前再次校验撤销和降权，不留下部分草稿', async () => {
+  const current = createGrant(false, true); const project = linkedProject(current);
+  for (const revoked of [false, true]) {
+    if (!revoked) setEcosystemScreenplayImport(current.id, true);
+    const req = request(`/api/open/projects/${project.id}/screenplay`, current.apiKey, screenplayInput);
+    req.headers.set('Idempotency-Key', 'during-read');
+    const body = req.body;
+    Object.defineProperty(req, 'body', { get() {
+      if (revoked) db.revokeGrant(current.id); else setEcosystemScreenplayImport(current.id, false);
+      return body;
+    } });
+    const response = await screenplayRoute.POST(req, { params: Promise.resolve({ id: project.id }) });
+    assert.equal(response.status, revoked ? 401 : 403);
+    assert.equal(db.getScreenplay(project.id), null);
+    if (!revoked) setEcosystemScreenplayImport(current.id, true);
+  }
+});
+
+test('静态 Key 可导入但同样不覆盖，并发导入仅落一次', async () => {
+  process.env.AICUT_OPEN_API_KEYS = 'static-import-test';
+  const project = db.createProject({ name: '静态导入' });
+  const responses = await Promise.all([importDraft(project.id, 'static-import-test'), importDraft(project.id, 'static-import-test')]);
+  assert.deepEqual(responses.map((response) => response.status).sort(), [200, 201]);
+  assert.equal(db.listScreenplayVersions(project.id).length, 1);
+  assert.equal((await importDraft(project.id, 'static-import-test', 'different-key')).status, 409);
+});
+
+test('导入失败回滚剧本与版本，数据库重开仍保留幂等记录', async () => {
+  const current = createGrant(false, true); const project = linkedProject(current);
+  db.getDb().exec("CREATE TRIGGER reject_import BEFORE INSERT ON ecosystem_screenplay_imports BEGIN SELECT RAISE(ABORT, 'isolated-test'); END;");
+  try { assert.equal((await importDraft(project.id, current.apiKey)).status, 503); }
+  finally { db.getDb().exec('DROP TRIGGER reject_import'); }
+  assert.equal(db.getScreenplay(project.id), null); assert.equal(db.listScreenplayVersions(project.id).length, 0);
+  const first = await (await importDraft(project.id, current.apiKey)).json();
+  db.closeDb();
+  createRequire(new URL('../apps/web/package.json', import.meta.url))('@sakura/db').closeDb();
+  const replay = await importDraft(project.id, current.apiKey); assert.equal(replay.status, 200);
+  assert.deepEqual(await replay.json(), { ...first, repeated: true });
+});
+
+test('旧生态库补建导入记录表，不影响已配对授权', () => {
+  const current = createGrant();
+  db.closeDb(); createRequire(new URL('../apps/web/package.json', import.meta.url))('@sakura/db').closeDb();
+  db.getDb().exec('DROP TABLE ecosystem_screenplay_imports'); db.closeDb();
+  assert.equal(db.findActiveGrant(current.apiKey).id, current.id);
+  assert.equal(db.getDb().prepare('SELECT COUNT(*) AS count FROM ecosystem_screenplay_imports').get().count, 0);
+  assert.equal(db.findActiveGrant(current.apiKey).scope.includes('screenplay:import'), false);
+});
+
 test('服务地址拒绝元数据/映射地址/公网 HTTP/携带凭证和重定向', async () => {
   for (const url of ['file:///etc/passwd', 'http://user:secret@localhost', 'http://localhost/?token=secret', 'http://localhost/#x']) assert.throws(() => normalizePeerUrl(url));
   for (const address of ['169.254.169.254', '0.0.0.0', '::', '::ffff:a9fe:a9fe', 'fe80::1']) assert.throws(() => validatePeerAddress(address, 'https:'));

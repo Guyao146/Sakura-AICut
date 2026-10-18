@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { Badge, Button, Card, Empty, Field, Input } from '@/components/ui';
-import { cancelPairingAction, createPairingAction, deleteGrantAction, readPeerTopicsAction, refreshEcosystemAction, revokeGrantAction } from '@/app/actions/ecosystem';
+import { cancelPairingAction, createPairingAction, deleteGrantAction, readPeerTopicsAction, refreshEcosystemAction, revokeGrantAction, setScreenplayImportAction } from '@/app/actions/ecosystem';
 import type { GrantView, PairingView, SharedTopicView } from '@/lib/ecosystem';
 
 const time = (value: string) => new Date(value).toLocaleString('zh-CN', { hour12: false });
@@ -10,6 +10,7 @@ export function EcosystemTab({ data }: { data: { pairings: PairingView[]; grants
   const [name, setName] = useState('SakuraSeeking');
   const [peerBaseUrl, setPeerBaseUrl] = useState('http://127.0.0.1:3210');
   const [allowRender, setAllowRender] = useState(false);
+  const [allowImport, setAllowImport] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [view, setView] = useState(data);
@@ -40,8 +41,9 @@ export function EcosystemTab({ data }: { data: { pairings: PairingView[]; grants
         <Field label="对端服务地址" hint="从制作端能够访问的最终地址"><Input aria-label="对端服务地址" value={peerBaseUrl} maxLength={2048} onChange={(event) => setPeerBaseUrl(event.target.value)} /></Field>
       </div>
       <label className="mb-4 flex items-center gap-2 text-xs text-slate-400"><input type="checkbox" checked={allowRender} onChange={(event) => setAllowRender(event.target.checked)} />另外授权提交渲染（消耗制作资源；不会自动执行）</label>
+      <label className="mb-4 flex items-center gap-2 text-xs text-slate-400"><input type="checkbox" checked={allowImport} onChange={(event) => setAllowImport(event.target.checked)} />另外授权导入剧本草稿（只写入原文/梗概/节拍，不生成人物卡、场景卡或镜头）</label>
       <Button variant="primary" disabled={busy || !name.trim() || !peerBaseUrl.trim()} onClick={() => void run(async () => {
-        const result = await createPairingAction({ name, peerBaseUrl, allowRender });
+        const result = await createPairingAction({ name, peerBaseUrl, allowRender, allowScreenplayImport: allowImport });
         if (!result.ok) throw new Error(result.error);
         setView((current) => ({ ...current, pairings: [result.data, ...current.pairings] }));
       })}>生成配对码</Button>
@@ -64,6 +66,12 @@ export function EcosystemTab({ data }: { data: { pairings: PairingView[]; grants
           setTopics((current) => ({ ...current, [grant.id]: result.data }));
           setMessage(`已读取 ${result.data.length} 条明确共享的来源选题`);
         })}>读取共享选题</Button>}
+          {!grant.revokedAt && <Button size="sm" disabled={busy} onClick={() => void run(async () => {
+            const enabled = !grant.scope.split(' ').includes('screenplay:import');
+            const result = await setScreenplayImportAction({ id: grant.id, enabled });
+            if (!result.ok) throw new Error(result.error);
+            setMessage(enabled ? '已允许该连接导入剧本草稿。' : '已关闭该连接的剧本草稿导入；已导入的剧本保留。');
+          })}>{grant.scope.split(' ').includes('screenplay:import') ? '停止剧本导入' : '允许导入剧本'}</Button>}
           <Button size="sm" variant={grant.revokedAt ? 'ghost' : 'danger'} disabled={busy} onClick={() => {
             if (!grant.revokedAt && !window.confirm('撤销这项双向授权？已创建的项目不会删除。')) return;
             void run(async () => {

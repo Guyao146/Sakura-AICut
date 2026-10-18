@@ -6,6 +6,7 @@ WORKDIR /app
 
 RUN corepack enable && corepack prepare pnpm@12.4.1 --activate || npm i -g pnpm@12.4.1
 
+# ffmpeg（渲染编码）+ 无头浏览器运行时依赖（Vibe 模式逐帧渲染）
 RUN apt-get update \
   && apt-get install -y --no-install-recommends ffmpeg ca-certificates \
   && rm -rf /var/lib/apt/lists/*
@@ -21,6 +22,13 @@ COPY apps/worker/package.json apps/worker/
 # 只装 worker 及其工作区依赖（@sakura/core / db / pipeline + zod + tsx）。
 # 不装 web 的前端栈（next / react / @xyflow/react / tailwind 等），省下数百 MB。
 RUN pnpm install --frozen-lockfile --filter @sakura/worker...
+
+# 构建期安装浏览器、运行库与中文字体；运行时不下载任何组件。
+ENV PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright
+RUN cd apps/worker && pnpm exec playwright install --with-deps --only-shell chromium \
+  && apt-get install -y --no-install-recommends fonts-noto-cjk \
+  && chmod -R a+rX /opt/ms-playwright \
+  && rm -rf /var/lib/apt/lists/*
 
 COPY tsconfig.base.json ./
 COPY packages packages

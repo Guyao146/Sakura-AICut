@@ -3,6 +3,9 @@ import { decryptJson, encryptJson } from '@sakura/core/server';
 import { getDb, nowIso, transaction } from '../client';
 
 export const ECOSYSTEM_READ_SCOPE = 'projects:read projects:create jobs:status';
+export const SCREENPLAY_IMPORT_SCOPE = 'screenplay:import';
+/** 可颁发的权限白名单；导入与渲染都必须显式授权 */
+export const ECOSYSTEM_SCOPES = ['projects:read', 'projects:create', 'jobs:status', 'jobs:submit', SCREENPLAY_IMPORT_SCOPE] as const;
 export interface EcosystemGrant {
   id: string; name: string; kind: string; peerBaseUrl: string; scope: string;
   pairedAt: string; revokedAt: string | null; createdAt: string; updatedAt: string;
@@ -31,7 +34,7 @@ function mapPairing(row: PairingRow): EcosystemPairing {
     expiresAt: row.expires_at, grantId: row.grant_id, createdAt: row.created_at };
 }
 
-export function createPairing(name: string, peerBaseUrl: string, allowRender = false, ttlMinutes = 10): EcosystemPairing {
+export function createPairing(name: string, peerBaseUrl: string, allowRender = false, allowScreenplayImport = false, ttlMinutes = 10): EcosystemPairing {
   if (!name.trim() || name.length > 80 || !Number.isInteger(ttlMinutes) || ttlMinutes < 1 || ttlMinutes > 10) throw new Error('配对参数无效');
   const db = getDb();
   const alphabet = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
@@ -39,11 +42,20 @@ export function createPairing(name: string, peerBaseUrl: string, allowRender = f
   do { code = Array.from({ length: 6 }, () => alphabet[randomInt(alphabet.length)]).join(''); }
   while (db.prepare('SELECT id FROM ecosystem_pairings WHERE code = ?').get(code));
   const row: PairingRow = { id: `pair_${randomBytes(12).toString('hex')}`, code, name: name.trim(),
-    peer_base_url: peerBaseUrl, scope: `${ECOSYSTEM_READ_SCOPE}${allowRender ? ' jobs:submit' : ''}`,
+    peer_base_url: peerBaseUrl,
+    scope: `${ECOSYSTEM_READ_SCOPE}${allowRender ? ' jobs:submit' : ''}${allowScreenplayImport ? ` ${SCREENPLAY_IMPORT_SCOPE}` : ''}`,
     expires_at: new Date(Date.now() + ttlMinutes * 60_000).toISOString(), grant_id: null, created_at: nowIso() };
   db.prepare('INSERT INTO ecosystem_pairings (id,code,name,peer_base_url,scope,expires_at,created_at) VALUES (?,?,?,?,?,?,?)')
     .run(row.id, row.code, row.name, row.peer_base_url, row.scope, row.expires_at, row.created_at);
   return mapPairing(row);
+}
+/** 给既有有效授权追加或移除权限；只能改成白名单内的组合 */
+export function setGrantScope(grantId: string, scopes: readonly string[]): void {
+  const unique = [...new Set(scopes)];
+  if (!unique.length || unique.some((scope) => !(ECOSYSTEM_SCOPES as readonly string[]).includes(scope))) throw new Error('权限范围无效');
+  const db = getDb();
+  if (!db.prepare('SELECT 1 FROM ecosystem_grants WHERE id = ? AND revoked_at IS NULL').get(grantId)) throw new Error('授权不存在或已吊销');
+  db.prepare('UPDATE ecosystem_grants SET scope = ?, updated_at = ? WHERE id = ?').run(unique.join(' '), nowIso(), grantId);
 }
 
 export function listActivePairings(): EcosystemPairing[] {
@@ -122,4 +134,34 @@ export function ownsEcosystemProject(projectId: string, ownerId: string): boolea
 export function findEcosystemProject(ownerId: string, requestId: string): string | null {
   return (getDb().prepare('SELECT project_id FROM ecosystem_projects WHERE owner_id = ? AND request_id = ?')
     .get(ownerId, requestId) as { project_id: string } | undefined)?.project_id ?? null;
+}
+
+/* ------------------- 剧本草稿导入 ------------------- */
+
+export interface ScreenplayImportRecord {
+  id: string; grantId: string; projectId: string; idempotencyKey: string; screenplayId: string; version: number; importedAt: string;
+}
+interface ImportRow {
+  id: string; grant_id: string; project_id: string; idempotency_key: string; screenplay_id: string; version: number; imported_at: string;
+}
+function mapImport(row: ImportRow): ScreenplayImportRecord {
+  return { id: row.id, grantId: row.grant_id, projectId: row.project_id, idempotencyKey: row.idempotency_key,
+    screenplayId: row.screenplay_id, version: row.version, importedAt: row.imported_at };
+}
+export function findScreenplayImport(grantId: string, idempotencyKey: string): ScreenplayImportRecord | null {
+  if (!idempotencyKey) return null;
+  const row = getDb().prepare('SELECT * FROM ecosystem_screenplay_imports WHERE grant_id = ? AND idempotency_key = ?')
+    .get(grantId, idempotencyKey) as ImportRow | undefined;
+  return row ? mapImport(row) : null;
+}
+export function createScreenplayImport(input: {
+  grantId: string; projectId: string; idempotencyKey: string; screenplayId: string; version: number;
+}): ScreenplayImportRecord {
+  const db = getDb();
+  const id = `imp_${randomBytes(12).toString('hex')}`;
+  const now = nowIso();
+  db.prepare(`INSERT INTO ecosystem_screenplay_imports (id, grant_id, project_id, idempotency_key, screenplay_id, version, imported_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?)`).run(id, input.grantId, input.projectId, input.idempotencyKey, input.screenplayId, input.version, now);
+  return { id, grantId: input.grantId, projectId: input.projectId, idempotencyKey: input.idempotencyKey,
+    screenplayId: input.screenplayId, version: input.version, importedAt: now };
 }

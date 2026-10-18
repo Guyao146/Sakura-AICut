@@ -53,6 +53,9 @@ function applyMigrations(db: DatabaseSync): void {
   db.exec(SCHEMA_SQL);
   // CREATE TABLE IF NOT EXISTS 不会给老库加列，这里按需幂等补列
   ensureColumn(db, 'shots', 'dubbing_media_id', 'TEXT');
+  ensureColumn(db, 'projects', 'mode', "TEXT NOT NULL DEFAULT 'studio'");
+  ensureColumn(db, 'vibe_projects', 'revision', 'INTEGER NOT NULL DEFAULT 0');
+  ensureColumn(db, 'vibe_projects', 'active_job_id', 'TEXT');
   ensureColumn(db, 'canvas_items', 'role', "TEXT NOT NULL DEFAULT 'plain'");
   ensureColumn(db, 'canvas_items', 'ref_id', 'TEXT');
   ensureColumn(db, 'canvas_items', 'voice_ref_media_id', 'TEXT');

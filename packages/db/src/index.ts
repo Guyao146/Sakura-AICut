@@ -16,6 +16,7 @@ export * from './repos/qa';
 export * from './repos/auth';
 export * from './repos/oidc';
 export * from './repos/ecosystem';
+export * from './repos/vibe';
 export * from './snapshot';
 
 import { getProjectWithContent } from './snapshot';

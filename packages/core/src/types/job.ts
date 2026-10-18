@@ -17,7 +17,10 @@ export type JobType =
   | 'timeline.render'
   | 'agent.run'
   | 'provider.probe'
-  | 'qa.review';
+  | 'qa.review'
+  | 'vibe.generate'
+  | 'vibe.code'
+  | 'vibe.render';
 
 export const JOB_TYPE_LABELS: Record<JobType, string> = {
   'text.generate': '文本生成',
@@ -33,6 +36,9 @@ export const JOB_TYPE_LABELS: Record<JobType, string> = {
   'agent.run': 'Agent 执行',
   'provider.probe': '供应商连通性检测',
   'qa.review': '成片 QA 检查',
+  'vibe.generate': 'Vibe 视频脚本生成',
+  'vibe.code': 'Vibe 动画代码生成',
+  'vibe.render': 'Vibe 视频渲染',
 };
 
 export interface Job<T = unknown> extends Timestamps {

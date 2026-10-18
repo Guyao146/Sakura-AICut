@@ -318,6 +318,18 @@
       "reason": "持久化协议标识，保留已有配置兼容性"
     },
     {
+      "file": "scripts/vibe-ui.mjs",
+      "text": "protocol: 'openai'",
+      "count": 1,
+      "reason": "本地模拟模型请求需使用已有持久化协议枚举"
+    },
+    {
+      "file": "scripts/vibe-integration.test.mjs",
+      "text": "protocol: 'openai'",
+      "count": 1,
+      "reason": "持久化协议标识，保留已有配置兼容性"
+    },
+    {
       "file": "packages/core/src/ai/adapters/messages.ts",
       "text": "'anthropic-version': '2023-06-01'",
       "count": 1,

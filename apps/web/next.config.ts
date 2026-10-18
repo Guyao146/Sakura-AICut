@@ -25,6 +25,10 @@ const nextConfig: NextConfig = {
     // 上传接口放宽请求体大小
     serverActions: { bodySizeLimit: '10mb' },
   },
+  // srcdoc 不受 frame-src 限制，但自身导航会被拦截；全站设置覆盖客户端路由切换。
+  async headers() {
+    return [{ source: '/:path*', headers: [{ key: 'Content-Security-Policy', value: "frame-src 'none'" }] }];
+  },
   serverExternalPackages: [],
 };
 

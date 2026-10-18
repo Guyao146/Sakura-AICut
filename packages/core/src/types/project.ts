@@ -98,6 +98,8 @@ export interface Project extends Timestamps {
   brief: ProjectBrief;
   stage: PipelineStage;
   status: ProjectStatus;
+  /** 创作模式：studio 五步流水线 / vibe 主题直出 */
+  mode: ProjectMode;
   /** 封面（首帧或指定媒体 ID） */
   coverMediaId?: ID | null;
   /** 最近一次渲染输出 */
@@ -105,5 +107,103 @@ export interface Project extends Timestamps {
   lastOpenedAt?: ISODateTime | null;
 }
 
+/**
+ * Vibe 模式：主题 → AI 视频脚本 → AI 动画代码 → 浏览器渲染 MP4
+ * 与五步流水线（studio 模式）并列的另一种创作模式
+ */
+
+/** 项目模式：studio 走五步流水线，vibe 走主题直出 */
+export type ProjectMode = 'studio' | 'vibe';
+
+export const PROJECT_MODES: ProjectMode[] = ['studio', 'vibe'];
+
+/** Vibe 模式渲染状态 */
+export type VibeRenderStatus = 'idle' | 'queued' | 'rendering' | 'succeeded' | 'failed' | 'canceled';
+
+export const VIBE_RENDER_STATUS_LABELS: Record<VibeRenderStatus, string> = {
+  idle: '未渲染',
+  queued: '排队中',
+  rendering: '渲染中',
+  succeeded: '已生成',
+  failed: '渲染失败',
+  canceled: '已取消',
+};
+
+/** AI 生成的视频脚本：一组按时间顺序排列的镜头 */
+export interface VibeScriptShot {
+  /** 场次 ID */
+  id: string;
+  /** 场次序号（从 1 开始） */
+  index: number;
+  /** 时长（秒） */
+  durationSec: number;
+  /** 画面描述：场景、人物、动作、视觉元素（交给代码生成模型） */
+  visualDescription: string;
+  /** 旁白 / 字幕文本 */
+  narration: string;
+  /** 运镜提示（可选） */
+  cameraMotion?: string;
+  /** 情绪氛围（可选） */
+  mood?: string;
+}
+
+export interface VibeScript {
+  shots: VibeScriptShot[];
+}
+
 /** 生成项目时的入参 */
-export type CreateProjectInput = Partial<Omit<ProjectBrief, 'name'>> & { name: string };
+export type CreateProjectInput = Partial<Omit<ProjectBrief, 'name'>> & { name: string; mode?: ProjectMode };
+
+/** Vibe 项目数据（对应 vibe_projects 表） */
+export interface VibeProject extends Timestamps {
+  id: ID;
+  projectId: ID;
+  /** 编辑与任务快照版本，阻止旧任务覆盖新内容 */
+  revision: number;
+  activeJobId: ID | null;
+  /** 创作主题 */
+  topic: string;
+  /** AI 生成的视频脚本（JSON） */
+  script: VibeScript | null;
+  /** AI 生成的动画页面代码（完整 HTML） */
+  code: string | null;
+  /** 代码最近更新时间 */
+  codeUpdatedAt: ISODateTime | null;
+  /** 渲染状态 */
+  renderStatus: VibeRenderStatus;
+  /** 渲染错误信息 */
+  renderError: string | null;
+  /** 渲染产物媒体 ID */
+  outputMediaId: ID | null;
+  /** 渲染产物访问地址 */
+  outputUrl: string | null;
+  /** 最近渲染完成时间 */
+  renderedAt: ISODateTime | null;
+}
+
+/**
+ * 渲染帧协议：AI 生成的动画页面必须遵守的约定
+ * 渲染器按时间轴逐帧调用 window.__vibeSeek(t) 截屏合成视频，
+ * 因此动画必须由 t 驱动（确定性渲染），不能用 setTimeout / requestAnimationFrame 自驱动
+ */
+export interface VibeFrameProtocol {
+  /** 页面暴露的寻帧函数：把动画驱动到第 t 秒 */
+  seekFunction: '__vibeSeek';
+  /** 页面暴露的元信息对象 */
+  meta: '__vibeMeta';
+}
+
+export const VIBE_PROTOCOL: VibeFrameProtocol = {
+  seekFunction: '__vibeSeek',
+  meta: '__vibeMeta',
+};
+
+/** 协议元信息：页面须定义 window.__vibeMeta = { durationSec, fps, width, height } */
+export interface VibeProtocolMeta {
+  /** 总时长（秒） */
+  durationSec: number;
+  /** 帧率 */
+  fps: number;
+  width: number;
+  height: number;
+}

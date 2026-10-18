@@ -35,7 +35,9 @@ const MEDIA_ROOT = join(dataDir(), 'media');
 
 /** 把 URL 段解析成 media 目录内的绝对路径；越界或穿越返回 null */
 function resolveMediaPath(segments: string[]): string | null {
-  const relative = normalize(segments.join('/')).replace(/\\/g, '/');
+  // 规范 URL 带 media 前缀；保留早期省略前缀的地址，但两者都只能读取媒体目录。
+  const mediaSegments = segments[0] === 'media' ? segments.slice(1) : segments;
+  const relative = normalize(mediaSegments.join('/')).replace(/\\/g, '/');
   if (relative.includes('..') || relative.startsWith('/')) return null;
   const absolute = join(MEDIA_ROOT, relative);
   const boundary = MEDIA_ROOT.endsWith(sep) ? MEDIA_ROOT : MEDIA_ROOT + sep;

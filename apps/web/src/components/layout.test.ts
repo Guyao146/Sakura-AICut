@@ -10,9 +10,9 @@ import { WorkflowNav } from './studio/WorkflowNav';
 import { Button } from './ui';
 
 const projects: Project[] = [
-  { id: 'draft', brief: { ...DEFAULT_BRIEF, name: 'Sakura Story', logline: '雨夜相遇' }, stage: 'brief', status: 'draft', createdAt: '', updatedAt: '2026-01-01' },
-  { id: 'done', brief: { ...DEFAULT_BRIEF, name: '完成的故事' }, stage: 'done', status: 'completed', createdAt: '', updatedAt: '2026-02-01' },
-  { id: 'archived', brief: { ...DEFAULT_BRIEF, name: '归档故事' }, stage: 'script', status: 'archived', createdAt: '', updatedAt: '2026-03-01' },
+  { id: 'draft', brief: { ...DEFAULT_BRIEF, name: 'Sakura Story', logline: '雨夜相遇' }, stage: 'brief', status: 'draft', mode: 'studio', createdAt: '', updatedAt: '2026-01-01' },
+  { id: 'done', brief: { ...DEFAULT_BRIEF, name: '完成的故事' }, stage: 'done', status: 'completed', mode: 'studio', createdAt: '', updatedAt: '2026-02-01' },
+  { id: 'archived', brief: { ...DEFAULT_BRIEF, name: '归档故事' }, stage: 'script', status: 'archived', mode: 'studio', createdAt: '', updatedAt: '2026-03-01' },
 ];
 
 test('项目库按更新时间排序，不改动输入数组', () => {
@@ -39,6 +39,13 @@ test('项目库空态提供新建入口，卡片显示中文阶段与项目链�
   assert.match(html, /项目设定/);
   assert.match(html, /已归档/);
   assert.doesNotMatch(html, />brief</);
+});
+
+test('项目库展示 Vibe 创作状态而非五步流程名称', () => {
+  const html = renderToStaticMarkup(createElement(ProjectLibrary, {
+    projects: [{ ...projects[0], mode: 'vibe', status: 'rendering' }],
+  }));
+  assert.match(html, /Vibe · 渲染中/);
 });
 
 test('项目库首格为新建项目入口，位于已有项目之前', () => {
