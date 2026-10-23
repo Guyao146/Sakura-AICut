@@ -8,6 +8,8 @@ export type AgentStepStatus = TaskStatus | 'waiting_approval' | 'skipped';
 
 /** Agent 可调用的工具名（与 worker 中 tools.ts 的实现一一对应） */
 export type AgentToolName =
+  | 'vibe.revise'
+  | 'jobs.status'
   | 'project.update_brief'
   | 'screenplay.generate'
   | 'screenplay.update'

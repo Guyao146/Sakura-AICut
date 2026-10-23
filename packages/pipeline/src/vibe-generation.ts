@@ -4,7 +4,7 @@ import {
   extractHtmlDocument, extractJson, parseWithSchema, vibeInstructionsSchema,
   vibeMetaFor, vibeScriptSchema, vibeTopicSchema,
 } from '@sakura/core';
-import { getProject } from '@sakura/db';
+import { getProject, listJobs } from '@sakura/db';
 import { runText } from './ai';
 import { requireVibeProject } from './vibe-jobs';
 
@@ -14,6 +14,7 @@ export interface VibeGenerationOptions {
   instructions?: string;
   temperature?: number;
   isCanceled?: () => boolean;
+  script?: VibeScript;
 }
 
 function assertNotCanceled(options: VibeGenerationOptions): void {
@@ -52,7 +53,7 @@ export async function generateVibeCode(projectId: string, options: VibeGeneratio
   const vibe = requireVibeProject(projectId);
   if (!vibe.script) throw new Error('尚未生成视频脚本，请先执行第一步');
   const brief = getProject(projectId)!.brief;
-  const script = parseWithSchema(vibeScriptSchema, vibe.script, 'Vibe 视频脚本');
+  const script = parseWithSchema(vibeScriptSchema, options.script ?? vibe.script, 'Vibe 视频脚本');
   const meta = vibeMetaFor(brief, script);
   const instructions = vibeInstructionsSchema.parse(options.instructions);
   assertNotCanceled(options);
@@ -63,6 +64,7 @@ export async function generateVibeCode(projectId: string, options: VibeGeneratio
         `视觉风格：${brief.style}`, `字幕语言：${brief.language}`,
         `window.__vibeMeta 必须精确等于：${JSON.stringify(meta)}`,
         `分镜脚本 JSON：${JSON.stringify(script)}`, instructions,
+        ...(vibe.code ? ['在现有动画基础上调整，保留未要求修改的设计：', vibe.code] : []),
       ].filter(Boolean).join('\n') },
     ],
     temperature: options.temperature ?? 0.4, maxTokens: 16000,
@@ -71,4 +73,26 @@ export async function generateVibeCode(projectId: string, options: VibeGeneratio
   const code = extractHtmlDocument(text);
   assertProtocolStub(code);
   return code;
+}
+
+/** 脚本和代码一起通过校验后由 worker 原子保存。 */
+export async function reviseVibeScript(projectId: string, options: VibeGenerationOptions): Promise<VibeScript> {
+  const vibe = requireVibeProject(projectId);
+  const history = listJobs({ projectId, limit: 12 }).filter((job) => job.type === 'vibe.revise' && job.status === 'succeeded')
+    .reverse().map((job) => (job.payload as { instructions?: string }).instructions).filter(Boolean);
+  assertNotCanceled(options);
+  const { text } = await runText({
+    messages: [
+      { role: 'system', content: VIBE_SCRIPT_SYSTEM_PROMPT + '\n这是对已有作品的修改。保留未要求修改的场次与旁白。纯视觉调整时返回原脚本。' },
+      { role: 'user', content: [
+        `主题：${vibe.topic}`, `现有脚本：${JSON.stringify(vibe.script)}`,
+        `之前已完成的调整（仅作上下文）：${JSON.stringify(history)}`,
+        `本轮调整：${vibeInstructionsSchema.parse(options.instructions)}`,
+      ].join('\n') },
+    ], json: true, temperature: 0.3, maxTokens: 6000,
+  });
+  assertNotCanceled(options);
+  const script = parseWithSchema(vibeScriptSchema, extractJson(text), '调整后的视频脚本');
+  vibeMetaFor(getProject(projectId)!.brief, script);
+  return script;
 }

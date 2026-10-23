@@ -1,6 +1,6 @@
 import type { AgentStep, Shot } from '@sakura/core';
 import {
-  AGENT_TOOLS,
+  AGENT_TOOLS, VIBE_AGENT_TOOLS,
   buildPlannerMessages,
   draftToSteps,
   extractJson,
@@ -14,7 +14,7 @@ import {
   createCanvasItem,
   getAsset,
   getPlan,
-  getProject,
+  getProject, getVibeProject, listJobs, listJobEvents, listPlans, listTurns,
   getScreenplay,
   listAssets,
   listPromptTemplates,
@@ -26,7 +26,7 @@ import {
   upsertScreenplay,
 } from '@sakura/db';
 import {
-  analyzeReference,
+  analyzeReference, enqueueVibeJob,
   applyCanvasLayout,
   buildTimelineFromShots,
   checkShotVideo,
@@ -80,7 +80,7 @@ export async function runAgentPlan(planId: string, options: AgentRunOptions): Pr
   // ---------- 1. 没有步骤时先规划 ----------
   if (plan.steps.length === 0) {
     plan = await planOnce(planId, options);
-    if (plan.status === 'waiting_approval' || plan.status === 'completed') {
+    if (['waiting_approval', 'completed', 'failed', 'canceled', 'paused'].includes(plan.status)) {
       return { status: plan.status, question: plan.question ?? null };
     }
   }
@@ -156,6 +156,9 @@ export async function runAgentPlan(planId: string, options: AgentRunOptions): Pr
         toolName: target.tool,
         data: result,
       });
+      if (target.tool === 'finish' || target.tool === 'vibe.revise') {
+        addTurn({ planId, projectId: current.projectId, role: 'assistant', content: String(result.message ?? '已完成') });
+      }
 
       if (target.tool === 'finish') {
         updatePlan(planId, { status: 'completed' });
@@ -195,11 +198,25 @@ async function planOnce(planId: string, options: AgentRunOptions) {
   const snapshot = loadContent(plan.projectId).snapshot;
 
   try {
-    const messages = buildPlannerMessages({ goal: plan.goal, snapshot });
+    const vibe = getVibeProject(plan.projectId);
+    const isVibe = getProject(plan.projectId)?.mode === 'vibe';
+    const history = listPlans(plan.projectId, 6).reverse().flatMap((entry) => listTurns(entry.id, 16))
+      .filter((turn) => turn.role === 'user' || turn.role === 'assistant').map((turn) => ({ role: turn.role, content: turn.content }));
+    const messages = buildPlannerMessages({ goal: plan.goal, snapshot,
+      allowedTools: isVibe ? VIBE_AGENT_TOOLS : undefined,
+      extraContext: isVibe ? [
+        '这是 Vibe 动画项目，不走传统剧本/资产/时间线流程。只能使用本次提供的工具。仅提交草稿调整任务，不得声称已经生成成片；最终导出必须由用户点击确认按钮。查询进度使用 jobs.status。',
+        `当前草稿：${JSON.stringify({ topic: vibe?.topic, revision: vibe?.revision, script: vibe?.script, hasCode: Boolean(vibe?.code), dubbing: vibe?.dubbing })}`,
+        `最近对话：${JSON.stringify(history).slice(-12000)}`,
+      ].join('\n') : undefined,
+    });
     const result = await runText({ messages, json: true, temperature: 0.3, maxTokens: 4000 });
     if (agentStopStatus(planId, options)) return getPlan(planId) ?? plan;
     const draft = parsePlanResponse(result.text);
     const steps = draftToSteps(draft);
+    if (isVibe && steps.some((step) => !(VIBE_AGENT_TOOLS as readonly string[]).includes(step.tool))) {
+      throw new Error('Vibe 计划包含不适用的工具，请重新描述调整目标');
+    }
     // 计划级 question 只在「规划后先等用户回答」时才有意义；没有 ask_user 步骤时
     // 它会残留下来，让后续「等待确认」的步骤也无法点确认（UI 优先渲染回答框）。
     const question = steps.some((step) => step.tool === 'agent.ask_user') ? null : draft.question ?? null;
@@ -220,6 +237,10 @@ async function planOnce(planId: string, options: AgentRunOptions) {
   } catch (error) {
     if (agentStopStatus(planId, options)) return getPlan(planId) ?? plan;
     const message = error instanceof Error ? error.message : String(error);
+    if (getProject(plan.projectId)?.mode === 'vibe') {
+      addTurn({ planId, projectId: plan.projectId, role: 'assistant', content: `规划失败：${message}。请重试或直接编辑草稿。` });
+      return updatePlan(planId, { status: 'failed', error: message });
+    }
     log(`模型规划不可用，改用标准制片流程：${message}`, 'warn');
     return updatePlan(planId, {
       summary: '模型规划不可用，已按标准制片流程生成计划',
@@ -242,7 +263,22 @@ async function executeAgentTool(
   const num = (key: string): number | undefined => (args[key] === undefined ? undefined : Number(args[key]));
   const bool = (key: string): boolean => Boolean(args[key]);
 
+  if (getProject(projectId)?.mode === 'vibe' && !(VIBE_AGENT_TOOLS as readonly string[]).includes(step.tool)) {
+    throw new Error('此工具不适用于 Vibe 项目');
+  }
   switch (step.tool) {
+    case 'vibe.revise': {
+      const queued = enqueueVibeJob(projectId, 'vibe.revise', { instructions: str('instructions') });
+      return { jobId: queued.id, status: queued.status, message: '草稿调整已排队，请在任务中心查看进度；完成后预览并确认导出。' };
+    }
+    case 'jobs.status': {
+      const recent = listJobs({ projectId, limit: 12 });
+      const active = listJobs({ projectId, status: ['pending', 'queued', 'running'], limit: -1 });
+      return { observedAt: new Date().toISOString(), jobs: [...new Map([...recent, ...active].map((job) => [job.id, job])).values()].map((job) => ({
+        id: job.id, type: job.type, status: job.status, progress: job.progress, stage: job.stageLabel,
+        error: job.error, events: listJobEvents(job.id, 5).map((event) => ({ level: event.level, message: event.message, at: event.createdAt })),
+      })) };
+    }
     case 'agent.ask_user':
       return { question: str('question') ?? '请补充项目设定或创作要求。' };
 

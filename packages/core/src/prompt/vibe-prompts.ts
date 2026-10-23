@@ -17,7 +17,7 @@ export const VIBE_PROTOCOL_SPEC = `你的页面必须实现以下渲染帧协议
 3. 页面加载时自动调用一次 window.__vibeSeek(0)。
 4. body 无外边距，根容器铺满整个视口（width × height 像素），溢出内容隐藏。
 5. 禁止加载任何外部资源（字体、图片、脚本、接口）——所有视觉元素必须用 HTML/CSS/SVG/Canvas 内联绘制。
-6. 输出仅包含无声画面与可见字幕，不承诺配音。禁用自运行 CSS 动画与 transition，若使用 Web Animations 必须暂停并在 __vibeSeek 内设置 currentTime。
+6. 页面仅生成画面与可见字幕，旁白配音由应用在最终导出时合成，页面不得播放音频。禁用自运行 CSS 动画与 transition，若使用 Web Animations 必须暂停并在 __vibeSeek 内设置 currentTime。
 7. 不要创建 iframe、弹窗、网络连接或导航；不要使用随机数、时钟和持久化存储。`;
 
 export const VIBE_SCRIPT_SYSTEM_PROMPT = `你是短视频导演兼编剧。根据给定的主题，输出一份「分镜脚本 JSON」。

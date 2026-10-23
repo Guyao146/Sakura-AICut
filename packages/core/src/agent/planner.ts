@@ -21,6 +21,7 @@ export interface PlannerInput {
   previousSummary?: string;
   /** 额外上下文（例如可用的运镜模板 key 列表） */
   extraContext?: string;
+  allowedTools?: readonly string[];
 }
 
 /** 把项目快照压缩成模型可读的摘要，控制 token 消耗 */
@@ -84,7 +85,7 @@ export function summarizeSnapshot(snapshot: ProjectSnapshot): string {
 }
 
 export function buildPlannerMessages(input: PlannerInput): ChatMessage[] {
-  const system = renderTemplate(AGENT_PLANNER_SYSTEM_PROMPT, { toolCatalog: buildToolCatalog() });
+  const system = renderTemplate(AGENT_PLANNER_SYSTEM_PROMPT, { toolCatalog: buildToolCatalog(input.allowedTools) });
   const userParts = [`【用户目标】${input.goal}`, '', '【项目当前状态】', summarizeSnapshot(input.snapshot)];
   if (input.previousSummary) userParts.push('', `【上一轮结论】${input.previousSummary}`);
   if (input.answers && input.answers.length > 0) {
@@ -106,7 +107,7 @@ export function parsePlanResponse(text: string): PlanDraft {
 
   const steps = draft.steps
     .filter((step) => isKnownTool(step.tool) || isKnownTool(step.tool.toLowerCase().replace(/_/g, '.')))
-    .map((step) => ({ ...step, tool: step.tool.toLowerCase().replace(/_/g, '.') }));
+    .map((step) => ({ ...step, tool: isKnownTool(step.tool) ? step.tool : step.tool.toLowerCase().replace(/_/g, '.') }));
 
   if (steps.length === 0) throw new Error('Agent 计划为空或工具名全部非法');
   return { summary: draft.summary, question: draft.question, steps };

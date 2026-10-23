@@ -256,6 +256,7 @@ CREATE INDEX IF NOT EXISTS idx_job_events ON job_events(job_id, created_at);
 -- Vibe 项目（主题直出模式：主题 → 视频脚本 → 动画代码 → 渲染产物）
 CREATE TABLE IF NOT EXISTS vibe_projects (
   id TEXT PRIMARY KEY,
+  dubbing_json TEXT NOT NULL DEFAULT '{}',
   project_id TEXT NOT NULL UNIQUE,
   topic TEXT NOT NULL DEFAULT '',
   revision INTEGER NOT NULL DEFAULT 0,

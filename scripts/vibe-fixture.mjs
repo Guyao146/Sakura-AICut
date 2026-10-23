@@ -1,3 +1,14 @@
+export function testAudio(seconds = 0.35) {
+  const samples = Math.round(24000 * seconds), buffer = Buffer.alloc(44 + samples * 2);
+  buffer.write('RIFF'); buffer.writeUInt32LE(buffer.length - 8, 4); buffer.write('WAVEfmt ', 8);
+  buffer.writeUInt32LE(16, 16); buffer.writeUInt16LE(1, 20); buffer.writeUInt16LE(1, 22);
+  buffer.writeUInt32LE(24000, 24); buffer.writeUInt32LE(48000, 28); buffer.writeUInt16LE(2, 32); buffer.writeUInt16LE(16, 34);
+  buffer.write('data', 36); buffer.writeUInt32LE(samples * 2, 40);
+  for (let i = 0; i < samples; i++) buffer.writeInt16LE(Math.round(8000 * Math.sin(i / 24000 * Math.PI * 880)), 44 + i * 2);
+  return buffer;
+}
+
+
 export const testScript = {
   shots: [
     { id: 'shot_1', index: 1, durationSec: 1.5, visualDescription: '粉色圆形从左向右移动', narration: '开始' },

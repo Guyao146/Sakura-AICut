@@ -6,7 +6,7 @@ import {
   createMedia, completeJob, dataDir, getAppSettings, getJob, getMedia, getVibeProject, transaction,
   updateJob, updateProject, updateVibeProject,
 } from '@sakura/db';
-import { generateVibeScript, generateVibeCode, requireVibeProject } from '@sakura/pipeline';
+import { generateVibeScript, generateVibeCode, reviseVibeScript, requireVibeProject } from '@sakura/pipeline';
 import type { HandlerContext } from './handlers';
 import { renderVibeVideo } from './vibe-render';
 
@@ -44,7 +44,18 @@ export async function handleVibeJob({ job, progress, log, isCanceled }: HandlerC
       persist(() => updateVibeProject(projectId, { script }, guard));
       log(`视频脚本完成：${script.shots.length} 场`);
     }
-    const needCode = job.type === 'vibe.code' || (job.type === 'vibe.generate' && payload.autoRender);
+    if (job.type === 'vibe.revise' && priorJob?.result?.draftSaved !== true) {
+      progress(10, 'Agent 正在调整脚本与旁白');
+      const script = await reviseVibeScript(projectId, options);
+      progress(35, 'Agent 正在调整动画代码');
+      const code = await generateVibeCode(projectId, { ...options, script });
+      persist(() => {
+        updateVibeProject(projectId, { script, code, codeUpdatedAt: new Date().toISOString() }, guard);
+        updateJob(job.id, { result: { draftSaved: true } });
+      });
+      log('调整后的脚本与动画已保存，等待用户预览确认');
+    }
+    const needCode = job.type === 'vibe.code' || (job.type === 'vibe.generate' && (payload.autoCode || payload.autoRender));
     if (needCode && !getVibeProject(projectId)?.code) {
       check();
       progress(30, 'AI 正在编写动画代码');
@@ -52,22 +63,23 @@ export async function handleVibeJob({ job, progress, log, isCanceled }: HandlerC
       persist(() => updateVibeProject(projectId, { code, codeUpdatedAt: new Date().toISOString() }, guard));
       log('动画代码已保存');
     }
-    if (job.type !== 'vibe.render' && !payload.autoRender) {
+    if (job.type !== 'vibe.render') {
       persist(() => {
         updateVibeProject(projectId, { renderStatus: 'idle' }, guard);
-        updateProject(projectId, { status: 'in_progress', stage: needCode ? 'edit' : 'script' });
-        completeJob(job.id, { revision: payload.revision });
+        updateProject(projectId, { status: 'in_progress', stage: needCode || job.type === 'vibe.revise' ? 'edit' : 'script' });
+        completeJob(job.id, { revision: payload.revision, draftSaved: true });
       });
       progress(100, '生成完成，可检查后继续');
       return { revision: payload.revision };
     }
+    if (payload.confirmedRevision !== payload.revision - 1) throw new Error('此导出任务未确认当前草稿，请重新预览并确认导出');
     persist(() => {
       updateVibeProject(projectId, { renderStatus: 'rendering', renderError: null }, guard);
       updateProject(projectId, { status: 'rendering', stage: 'edit' });
     });
     const result = await renderVibeVideo(projectId, {
       ffmpegPath: getAppSettings().ffmpegPath, isCanceled: stopped,
-      onProgress: (percent, stage) => progress(50 + Math.round(percent * 0.48), stage), onLog: log,
+      onProgress: (percent, stage) => progress(5 + Math.round(percent * 0.93), stage), onLog: log,
     });
     outputPath = result.outputPath;
     const fileSize = (await stat(outputPath)).size;

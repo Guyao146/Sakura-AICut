@@ -22,6 +22,8 @@ const nextConfig: NextConfig = {
   allowedDevOrigins: ['127.0.0.1', 'localhost'],
   typescript: { ignoreBuildErrors: false },
   experimental: {
+    // 音乐通过独立上传路由接收；为 32 MiB 文件预留 multipart 开销。
+    proxyClientMaxBodySize: '33mb',
     // 上传接口放宽请求体大小
     serverActions: { bodySizeLimit: '10mb' },
   },

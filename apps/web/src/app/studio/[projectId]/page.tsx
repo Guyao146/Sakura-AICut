@@ -48,7 +48,11 @@ export default async function StudioPage({ params }: { params: Promise<{ project
       ...listJobs({ projectId, limit: 40 }),
       ...listJobs({ projectId, status: ['pending', 'queued', 'running'], limit: -1 }),
     ].map((job) => [job.id, job])).values()];
-    return <VibeStudio key={projectId} data={{ project: content.project, jobs, vibe }} />;
+    const plans = listPlans(projectId, 6);
+    const plan = plans[0] ?? null;
+    const turns = plans.reverse().flatMap((entry) => listTurns(entry.id, 40));
+    const audioMedia = listMedia(projectId, { kind: 'audio', ownerType: 'upload' });
+    return <VibeStudio key={projectId} data={{ project: content.project, jobs, vibe, plan, turns, audioMedia }} />;
   }
 
   const mediaList = listMedia(projectId);

@@ -6,6 +6,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createId, vibeMetaFor, planVibeFrames, type VibeProtocolMeta } from '@sakura/core';
 import { dataDir, getProject, getVibeProject } from '@sakura/db';
+import { addVibeDubbing } from './vibe-audio';
 
 export interface VibeRenderOptions {
   ffmpegPath?: string;
@@ -140,7 +141,14 @@ export async function renderVibeVideo(projectId: string, options: VibeRenderOpti
   let destination: string | undefined;
   let completed = false;
   try {
-    await renderIsolated(vibe.code, meta, temporary, options);
+    const withAudio = vibe.dubbing.enabled || Boolean(vibe.dubbing.music);
+    const silent = withAudio ? join(workDir, 'silent.mp4') : temporary;
+    await renderIsolated(vibe.code, meta, silent, {
+      ...options, onProgress: (percent, stage) => options.onProgress?.(Math.round(percent * (withAudio ? 0.7 : 1)), stage),
+    });
+    if (withAudio) await addVibeDubbing(vibe, project.brief.language, silent, temporary, workDir, {
+      ...options, onProgress: (percent, stage) => options.onProgress?.(70 + Math.round(percent * 0.3), stage),
+    });
     if (options.isCanceled?.()) throw new Error('渲染已取消');
     const size = (await stat(temporary)).size;
     if (size < 32) throw new Error('渲染产物为空');

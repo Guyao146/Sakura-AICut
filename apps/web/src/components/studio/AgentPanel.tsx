@@ -48,8 +48,10 @@ export function AgentPanel({
   mode,
   running,
   onRefresh,
+  projectMode = 'studio',
 }: {
   projectId: string;
+  projectMode?: 'studio' | 'vibe';
   plan: AgentPlan | null;
   turns: AgentChatTurn[];
   /** 计划模式：每步等确认；行动模式：全自动执行 */
@@ -115,7 +117,7 @@ export function AgentPanel({
             </span>
           </div>
           <div className="mt-1 text-[11px] leading-relaxed text-slate-500">
-            {mode === 'plan'
+            {projectMode === 'vibe' ? '描述调整要求，Agent 会结合当前稿和最近对话提交草稿修改，也可查询任务进度。模型调用可能计费；最终导出始终需要你单独确认。' : mode === 'plan'
               ? '先出完整计划，每个步骤执行前等你确认，安全可控。'
               : '全自动执行不再逐步确认，速度更快，会直接消耗额度。'}
           </div>
@@ -124,11 +126,13 @@ export function AgentPanel({
         <Textarea
           rows={3}
           value={goal}
-          placeholder="例如：帮我做成 90 秒竖屏短剧：先出剧本，再出资产与分镜，最后拼好时间线"
+          aria-label="与 Agent 沟通"
+          maxLength={2000}
+          placeholder={projectMode === 'vibe' ? '例如：保留第一场，把结尾改成暖色，第二场旁白短一点；或询问当前任务进度' : '例如：帮我做成 90 秒竖屏短剧：先出剧本，再出资产与分镜，最后拼好时间线'}
           onChange={(event) => setGoal(event.target.value)}
         />
         <div className="mt-2 flex flex-wrap gap-1.5">
-          {GOAL_PRESETS.map((preset) => (
+          {(projectMode === 'vibe' ? ['把画面配色改得更温暖，保留原有字幕', '调整第二场旁白，让表达更自然', '查看当前任务进度和错误'] : GOAL_PRESETS).map((preset) => (
             <button
               key={preset}
               type="button"
@@ -173,6 +177,7 @@ export function AgentPanel({
                   {turn.role === 'user' ? '我' : turn.role === 'tool' ? `工具 ${turn.toolName ?? ''}` : 'Agent'}：
                 </span>
                 {turn.content}
+                {turn.role === 'tool' && turn.data ? <details className="mt-1"><summary className="cursor-pointer text-slate-400">工具参数 / 结果</summary><pre className="mt-1 max-h-64 overflow-auto whitespace-pre-wrap break-all text-[10px]">{JSON.stringify(turn.data, null, 2)}</pre></details> : null}
               </div>
             ))}
           </div>

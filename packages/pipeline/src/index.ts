@@ -21,3 +21,4 @@ export * from './redraw';
 export * from './qa';
 export * from './vibe-generation';
 export * from './vibe-jobs';
+export * from './vibe-audio';

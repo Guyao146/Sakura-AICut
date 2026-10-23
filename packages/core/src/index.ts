@@ -34,6 +34,7 @@ export type {
   AdapterContext,
   AudioGenerateRequest,
   AudioGenerateResult,
+  AudioVoice,
   AsyncTaskHandle,
   AsyncTaskState,
   BalanceResult,

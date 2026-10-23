@@ -4,10 +4,10 @@ import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import clsx from 'clsx';
-import { isActiveJob, vibeMetaFor, VIBE_RENDER_STATUS_LABELS, type Job, type Project, type VibeProject } from '@sakura/core';
-import { Badge, Button, Card, Field, Textarea } from '@/components/ui';
+import { isActiveJob, vibeMetaFor, VIBE_RENDER_STATUS_LABELS, type Job, type Project, type VibeProject, type AgentPlan, type AgentChatTurn, type VibeDubbing } from '@sakura/core';
+import { Badge, Button, Card, Field, Input, Textarea } from '@/components/ui';
 import {
-  saveVibeCodeAction,
+  saveVibeCodeAction, saveVibeDubbingAction,
   saveVibeScriptAction,
   startVibeCodeAction,
   startVibeRenderAction,
@@ -16,6 +16,9 @@ import {
 import { useStudioJobs } from './use-studio-jobs';
 import { TaskCenter } from './TaskCenter';
 import { VibePreview } from './VibePreview';
+import { AgentPanel } from './AgentPanel';
+import { VibeAudioSettings } from './VibeAudioSettings';
+import type { MediaFile } from '@sakura/core';
 
 /**
  * Vibe 模式工作台：主题 → 视频脚本 → 动画代码 → 渲染 MP4
@@ -25,6 +28,9 @@ export interface VibeStudioData {
   project: Project;
   jobs: Job[];
   vibe: VibeProject | null;
+  plan: AgentPlan | null;
+  turns: AgentChatTurn[];
+  audioMedia: MediaFile[];
 }
 
 export function VibeStudio({ data }: { data: VibeStudioData }) {
@@ -39,16 +45,26 @@ export function VibeStudio({ data }: { data: VibeStudioData }) {
   const [showScript, setShowScript] = useState(false);
   const [draftRevision, setDraftRevision] = useState(vibe?.revision ?? 0);
   const [submitting, setSubmitting] = useState(false);
+  const [audioBusy, setAudioBusy] = useState(false);
+  const [dubbingDraft, setDubbingDraft] = useState<{ value: VibeDubbing; revision: number } | null>(null);
+  const dubbing = dubbingDraft?.value ?? vibe?.dubbing ?? { enabled: false, voice: '', speed: 1, volume: 1, pitch: 0 };
+  const editDubbing = (patch: Partial<VibeDubbing>) => setDubbingDraft((current) => ({
+    value: { ...dubbing, ...patch }, revision: current?.revision ?? vibe?.revision ?? 0,
+  }));
+  const [confirmedRevision, setConfirmedRevision] = useState<number | null>(null);
+  const dubbingDirty = dubbingDraft !== null;
   const [message, setMessage] = useState<{ tone: 'ok' | 'err'; text: string } | null>(null);
   const { jobs, error: syncError, reload: loadJobs, acceptJob } = useStudioJobs(projectId, data.jobs);
 
-  const vibeJobs = jobs.filter((job) => job.type.startsWith('vibe.'));
+  const vibeJobs = jobs.filter((job) => job.type.startsWith('vibe.') || job.type === 'agent.run');
   const activeJob = vibeJobs.find(isActiveJob);
-  const busy = submitting || Boolean(activeJob);
+  const busy = submitting || audioBusy || Boolean(activeJob);
   const busyScript = activeJob?.type === 'vibe.generate';
   const busyCode = activeJob?.type === 'vibe.code';
   const busyRender = Boolean(activeJob && vibe?.renderStatus === 'rendering');
   const phaseLabel = activeJob?.stageLabel || '等待任务执行';
+
+  useEffect(() => { setConfirmedRevision(null); }, [vibe?.revision, dubbingDirty, showCode, showScript]);
 
   useEffect(() => {
     if (!showCode) setCodeDraft(vibe?.code ?? '');
@@ -84,14 +100,18 @@ export function VibeStudio({ data }: { data: VibeStudioData }) {
     void run('视频脚本生成', () => startVibeScriptAction(projectId, { topic, instructions }));
   };
   const submitCode = () => void run('动画代码生成', () => startVibeCodeAction(projectId, instructions || undefined));
-  const submitRender = () => void run('渲染', () => startVibeRenderAction(projectId));
+  const submitRender = () => {
+    if (confirmedRevision !== vibe?.revision) return;
+    void run('最终导出', () => startVibeRenderAction(projectId, confirmedRevision));
+    setConfirmedRevision(null);
+  };
   const saveCode = () => void run('代码保存', () => saveVibeCodeAction(projectId, codeDraft, draftRevision));
   const saveScript = () => void run('脚本保存', async () => saveVibeScriptAction(projectId, JSON.parse(scriptDraft), draftRevision));
   let probeError: string | null = null;
   let expectedMeta = null;
   try { if (vibe?.script) expectedMeta = vibeMetaFor(data.project.brief, vibe.script); }
   catch { probeError = '已保存的脚本不符合当前帧协议，请编辑脚本或重新生成。'; }
-  const generateAll = () => void run('一键生成', () => startVibeScriptAction(projectId, { topic, instructions, autoRender: true }));
+  const generateAll = () => void run('一键生成', () => startVibeScriptAction(projectId, { topic, instructions, autoCode: true }));
 
 
   return (
@@ -111,9 +131,9 @@ export function VibeStudio({ data }: { data: VibeStudioData }) {
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button size="sm" variant="primary" disabled={busy || showCode || showScript || !topic.trim()} onClick={generateAll}>一键生成视频</Button>
-            <Button size="sm" loading={busyRender} disabled={!vibe?.code || busy || showCode || showScript} onClick={submitRender}>
-              {busyRender ? '渲染中…' : '渲染已保存代码'}
+            <Button size="sm" variant="primary" disabled={busy || showCode || showScript || !topic.trim()} onClick={generateAll}>生成动画草稿</Button>
+            <Button size="sm" loading={busyRender} disabled={!vibe?.code || busy || showCode || showScript || dubbingDirty || confirmedRevision !== vibe?.revision} onClick={submitRender}>
+              {busyRender ? '导出中…' : '确认并导出最终视频'}
             </Button>
           </div>
         </div>
@@ -162,7 +182,7 @@ export function VibeStudio({ data }: { data: VibeStudioData }) {
                       {shot.mood ? <span className="text-slate-500">· {shot.mood}</span> : null}
                     </div>
                     <div className="text-[12px] leading-5 text-slate-200">{shot.visualDescription}</div>
-                    {shot.narration ? <div className="mt-1 break-words text-[11px] text-slate-400">字幕：{shot.narration}</div> : null}
+                    {shot.narration ? <div className="mt-1 break-words text-[11px] text-slate-400">旁白 / 字幕：{shot.narration}</div> : null}
                   </li>
                 ))}
               </ol>
@@ -196,6 +216,21 @@ export function VibeStudio({ data }: { data: VibeStudioData }) {
               )}
             </Card>
           ) : null}
+          <Card title="④ 配音、音乐与确认">
+            <VibeAudioSettings projectId={projectId} value={dubbing} onChange={editDubbing} disabled={busy} media={data.audioMedia} onBusyChange={setAudioBusy} />
+            <div className="mt-4" />
+            <Button size="sm" disabled={busy || !dubbingDirty} onClick={() => void run('配音设置保存', async () => {
+              const result = await saveVibeDubbingAction(projectId, dubbing, dubbingDraft!.revision);
+              if (result.ok) setDubbingDraft(null);
+              return result;
+            })}>保存音频设置</Button>
+            {dubbingDirty ? <Button size="sm" variant="ghost" disabled={busy} onClick={() => setDubbingDraft(null)}>放弃设置修改</Button> : null}
+            <label className="mt-4 flex items-start gap-2 text-xs leading-5">
+              <input className="mt-1" type="checkbox" aria-label="确认当前动画版本" checked={confirmedRevision === vibe?.revision} disabled={busy || !vibe?.code || showCode || showScript || dubbingDirty} onChange={(event) => setConfirmedRevision(event.target.checked ? vibe!.revision : null)} />
+              我已检查当前动画、旁白与音乐设置，确认此版本可以输出最终视频（修改后需重新确认）。
+            </label>
+          </Card>
+          <AgentPanel projectId={projectId} projectMode="vibe" plan={data.plan} turns={data.turns} mode="action" running={jobs.some((job) => job.type === 'agent.run' && isActiveJob(job))} onRefresh={() => { router.refresh(); void loadJobs(); }} />
         </section>
 
         <aside className="min-w-0 space-y-5">
@@ -224,7 +259,7 @@ export function VibeStudio({ data }: { data: VibeStudioData }) {
             ) : null}
           </Card>
 
-          <Card title="成片（无声动画与字幕）">
+          <Card title="最终视频">
             {vibe?.outputUrl ? (
               <div>
                 <video src={vibe.outputUrl} controls playsInline preload="metadata" className="w-full rounded-lg border border-[#242a36] bg-black" />
@@ -233,7 +268,7 @@ export function VibeStudio({ data }: { data: VibeStudioData }) {
                 </a>
               </div>
             ) : (
-              <p className="text-[11px] leading-5 text-slate-500">尚未渲染。使用「一键生成视频」自动完成全部阶段，或检查脚本和代码后点击「渲染已保存代码」。</p>
+              <p className="text-[11px] leading-5 text-slate-500">尚未导出。先预览动画草稿，可与 Agent 沟通调整；保存配音设置并确认当前版本后，再导出最终视频。</p>
             )}
             {vibe?.renderedAt ? <p className="mt-2 text-[10px] text-slate-600">最近渲染：{new Date(vibe.renderedAt).toLocaleString('zh-CN')}</p> : null}
           </Card>

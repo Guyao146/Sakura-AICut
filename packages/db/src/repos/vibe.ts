@@ -1,11 +1,11 @@
 import type { VibeProject, VibeRenderStatus, VibeScript } from '@sakura/core';
-import { createId, vibeTopicSchema } from '@sakura/core';
+import { createId, vibeDubbingSchema, vibeTopicSchema } from '@sakura/core';
 import { getDb, nowIso, parseJson } from '../client';
 import { getProject } from './projects';
 
 interface VibeRow {
   id: string; project_id: string; topic: string; revision: number; active_job_id: string | null;
-  script_json: string | null; code: string | null; code_updated_at: string | null;
+  script_json: string | null; code: string | null; code_updated_at: string | null; dubbing_json: string;
   render_status: string; render_error: string | null; output_media_id: string | null;
   output_url: string | null; rendered_at: string | null; created_at: string; updated_at: string;
 }
@@ -14,6 +14,7 @@ function mapRow(row: VibeRow): VibeProject {
   return {
     id: row.id, projectId: row.project_id, topic: row.topic,
     revision: row.revision, activeJobId: row.active_job_id,
+    dubbing: vibeDubbingSchema.parse(parseJson(row.dubbing_json, {})),
     script: parseJson<VibeScript | null>(row.script_json, null),
     code: row.code, codeUpdatedAt: row.code_updated_at,
     renderStatus: row.render_status as VibeRenderStatus, renderError: row.render_error,
@@ -39,7 +40,7 @@ export function createVibeProject(projectId: string, topic: string): VibeProject
 
 export type VibePatch = Partial<Pick<VibeProject,
   'topic' | 'revision' | 'activeJobId' | 'script' | 'code' | 'codeUpdatedAt' | 'renderStatus' |
-  'renderError' | 'outputMediaId' | 'outputUrl' | 'renderedAt'>>;
+  'renderError' | 'outputMediaId' | 'outputUrl' | 'renderedAt' | 'dubbing'>>;
 
 /** 单条条件更新，可加入调用方事务；版本与任务所有权不符时拒绝覆盖。 */
 export function updateVibeProject(
@@ -55,6 +56,7 @@ export function updateVibeProject(
   if (patch.activeJobId !== undefined) push('active_job_id', patch.activeJobId);
   if (patch.script !== undefined) push('script_json', patch.script === null ? null : JSON.stringify(patch.script));
   if (patch.code !== undefined) push('code', patch.code);
+  if (patch.dubbing !== undefined) push('dubbing_json', JSON.stringify(vibeDubbingSchema.parse(patch.dubbing)));
   if (patch.codeUpdatedAt !== undefined) push('code_updated_at', patch.codeUpdatedAt);
   if (patch.renderStatus !== undefined) push('render_status', patch.renderStatus);
   if (patch.renderError !== undefined) push('render_error', patch.renderError);

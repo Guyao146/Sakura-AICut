@@ -41,11 +41,28 @@ export const vibeScriptSchema = z.object({
 });
 export type VibeScriptDraft = z.infer<typeof vibeScriptSchema>;
 
+export const vibeDubbingSchema = z.object({
+  enabled: z.boolean().default(false),
+  voice: z.string().trim().max(120).default(''),
+  speed: z.number().min(0.25).max(4).default(1),
+  volume: z.number().min(0.1).max(2).default(1),
+  pitch: z.number().int().min(-12).max(12).default(0),
+  music: z.object({
+    mediaId: z.string().regex(/^med_[a-zA-Z0-9_-]+$/),
+    name: z.string().trim().min(1).max(200),
+    volume: z.number().min(0).max(1).default(0.2),
+    loop: z.boolean().default(true),
+  }).strict().optional(),
+}).strict();
+
 export const vibeJobPayloadSchema = z.object({
   revision: z.number().int().nonnegative(),
   topic: vibeTopicSchema.optional(),
   instructions: vibeInstructionsSchema,
+  // 兼容旧队列字段：只继续生成代码，不再自动导出。
   autoRender: z.boolean().default(false),
+  autoCode: z.boolean().default(false),
+  confirmedRevision: z.number().int().nonnegative().optional(),
 }).strict();
 export type VibeJobPayload = z.infer<typeof vibeJobPayloadSchema>;
 

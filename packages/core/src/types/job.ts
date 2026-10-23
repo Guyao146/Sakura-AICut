@@ -20,6 +20,7 @@ export type JobType =
   | 'qa.review'
   | 'vibe.generate'
   | 'vibe.code'
+  | 'vibe.revise'
   | 'vibe.render';
 
 export const JOB_TYPE_LABELS: Record<JobType, string> = {
@@ -38,7 +39,8 @@ export const JOB_TYPE_LABELS: Record<JobType, string> = {
   'qa.review': '成片 QA 检查',
   'vibe.generate': 'Vibe 视频脚本生成',
   'vibe.code': 'Vibe 动画代码生成',
-  'vibe.render': 'Vibe 视频渲染',
+  'vibe.revise': 'Vibe 对话调整',
+  'vibe.render': 'Vibe 最终视频导出',
 };
 
 export interface Job<T = unknown> extends Timestamps {

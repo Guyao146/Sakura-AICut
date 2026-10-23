@@ -154,6 +154,15 @@ export interface VibeScript {
 /** 生成项目时的入参 */
 export type CreateProjectInput = Partial<Omit<ProjectBrief, 'name'>> & { name: string; mode?: ProjectMode };
 
+export interface VibeDubbing {
+  enabled: boolean;
+  voice: string;
+  speed: number;
+  volume: number;
+  pitch: number;
+  music?: { mediaId: string; name: string; volume: number; loop: boolean };
+}
+
 /** Vibe 项目数据（对应 vibe_projects 表） */
 export interface VibeProject extends Timestamps {
   id: ID;
@@ -161,6 +170,8 @@ export interface VibeProject extends Timestamps {
   /** 编辑与任务快照版本，阻止旧任务覆盖新内容 */
   revision: number;
   activeJobId: ID | null;
+  /** 最终导出配音设置；由应用合成，不在动画页面执行 */
+  dubbing: VibeDubbing;
   /** 创作主题 */
   topic: string;
   /** AI 生成的视频脚本（JSON） */

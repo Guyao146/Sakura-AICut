@@ -56,6 +56,7 @@ function applyMigrations(db: DatabaseSync): void {
   ensureColumn(db, 'projects', 'mode', "TEXT NOT NULL DEFAULT 'studio'");
   ensureColumn(db, 'vibe_projects', 'revision', 'INTEGER NOT NULL DEFAULT 0');
   ensureColumn(db, 'vibe_projects', 'active_job_id', 'TEXT');
+  ensureColumn(db, 'vibe_projects', 'dubbing_json', "TEXT NOT NULL DEFAULT '{}'");
   ensureColumn(db, 'canvas_items', 'role', "TEXT NOT NULL DEFAULT 'plain'");
   ensureColumn(db, 'canvas_items', 'ref_id', 'TEXT');
   ensureColumn(db, 'canvas_items', 'voice_ref_media_id', 'TEXT');

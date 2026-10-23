@@ -120,6 +120,12 @@ export interface AudioGenerateResult {
   raw?: unknown;
 }
 
+export interface AudioVoice {
+  id: string;
+  name: string;
+  description?: string;
+}
+
 export interface AsyncTaskHandle {
   /** 供应商侧任务 ID */
   taskId: string;
@@ -192,6 +198,8 @@ export interface ProviderAdapter {
   image?(ctx: AdapterContext, req: ImageGenerateRequest): Promise<ImageGenerateResult>;
   /** 语音合成 / 音乐生成（同步返回音频） */
   audio?(ctx: AdapterContext, req: AudioGenerateRequest): Promise<AudioGenerateResult>;
+  listVoices?(ctx: AdapterContext): Promise<AudioVoice[]>;
+  audioSpeedRange?: { min: number; max: number };
   /** 异步视频：提交任务 */
   submitVideo?(ctx: AdapterContext, req: VideoGenerateRequest): Promise<AsyncTaskHandle>;
   /** 异步视频：查询任务 */

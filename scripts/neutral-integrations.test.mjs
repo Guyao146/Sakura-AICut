@@ -11,6 +11,7 @@ process.env.SAKURA_DB_FILE = join(data, 'test.db');
 const db = await import('../packages/db/src/index.ts');
 const { PROVIDER_PRESETS, PROTOCOL_LABELS } = await import('../packages/core/src/index.ts');
 const { getAdapter, SUPPORTED_PROTOCOLS } = await import('../packages/core/src/ai/registry.ts');
+const { fileTasksAdapter } = await import('../packages/core/src/ai/adapters/file-tasks.ts');
 const oidc = await import('../apps/web/src/lib/server/oidc.ts');
 const policy = validatePolicy(JSON.parse(readFileSync(new URL('brand-policy.json', import.meta.url), 'utf8')));
 const originalFetch = globalThis.fetch;
@@ -66,6 +67,94 @@ test('七种适配器的连通性探测仍能调用预期协议路径', async ()
   globalThis.fetch = originalFetch;
 });
 
+
+test('文件任务接口的语音合成按 T2A 协议组装请求并解析 hex 音频', async () => {
+  const requests = [];
+  globalThis.fetch = async (url, init = {}) => {
+    requests.push({ url: new URL(url), init });
+    return json({
+      base_resp: { status_code: 0 },
+      data: { audio: '00112233ff' },
+      extra_info: { audio_length: 1500 },
+    });
+  };
+  const result = await fileTasksAdapter.audio(
+    {
+      providerId: 'test', providerName: '测试接口', baseUrl: 'https://models.example.test',
+      credentials: { apiKey: 'test-key', groupId: 'group-1' }, timeoutSec: 30,
+    },
+    { model: 'speech-02-hd', input: '你好，世界', voice: 'male-qn-qingse', language: 'zh-CN', speed: 1.1, format: 'mp3' },
+  );
+  globalThis.fetch = originalFetch;
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].url.pathname, '/v1/t2a_v2');
+  assert.equal(requests[0].url.searchParams.get('GroupId'), 'group-1');
+  assert.equal(requests[0].init.headers.Authorization, 'Bearer test-key');
+  const body = JSON.parse(requests[0].init.body);
+  assert.equal(body.model, 'speech-02-hd');
+  assert.equal(body.text, '你好，世界');
+  assert.equal(body.stream, false);
+  assert.equal(body.output_format, 'hex');
+  assert.equal(body.voice_setting.voice_id, 'male-qn-qingse');
+  assert.equal(body.voice_setting.speed, 1.1);
+  assert.equal(body.audio_setting.format, 'mp3');
+  assert.equal(body.audio_setting.channel, 1);
+  assert.equal(body.language_boost, 'Chinese');
+  assert.ok(result.b64.startsWith('data:audio/mp3;base64,'));
+  assert.equal(result.durationSec, 1.5);
+  assert.equal(result.format, 'mp3');
+});
+test('文件任务语音保留嵌套音色参数、拒绝损坏音频并报告远端错误', async (t) => {
+  t.after(() => { globalThis.fetch = originalFetch; });
+  let body;
+  let payload = { base_resp: { status_code: 0 }, data: { audio: 'abcd' } };
+  const ctx = { providerId: 'test', providerName: '测试接口', baseUrl: 'https://models.example.test',
+    credentials: { apiKey: 'test-key' }, timeoutSec: 30,
+    fetchImpl: async (_url, init) => { body = JSON.parse(init.body); return json(payload); } };
+  const request = { model: 'test-speech', input: '测试', format: 'wav', volume: 0.8, pitch: -2,
+    params: { voice_setting: { voice_id: 'saved-voice', emotion: 'calm' }, audio_setting: { channel: 2 },
+      stream: true, output_format: 'url', model: 'wrong', text: 'wrong' } };
+  globalThis.fetch = ctx.fetchImpl;
+  const result = await fileTasksAdapter.audio(ctx, request);
+  assert.equal(body.voice_setting.voice_id, 'saved-voice');
+  assert.equal(body.voice_setting.emotion, 'calm');
+  assert.equal(body.voice_setting.vol, 0.8);
+  assert.equal(body.voice_setting.pitch, -2);
+  assert.equal(body.audio_setting.channel, 2);
+  assert.equal(body.audio_setting.format, 'wav');
+  assert.equal(body.model, request.model);
+  assert.equal(body.text, request.input);
+  assert.equal(body.stream, false);
+  assert.equal(body.output_format, 'hex');
+  assert.equal(result.b64, 'data:audio/wav;base64,q80=');
+  for (const audio of ['', '0', 'aaZZ', 'https-invalid']) {
+    payload = { data: { audio } };
+    await assert.rejects(() => fileTasksAdapter.audio(ctx, request), /音频/);
+  }
+  payload = { base_resp: { status_code: 1004, status_msg: 'invalid credentials' } };
+  await assert.rejects(() => fileTasksAdapter.audio(ctx, request), /1004.*invalid credentials/);
+  await assert.rejects(() => fileTasksAdapter.audio(ctx, { ...request, speed: 3 }), /0.5–2/);
+  payload = { data: { audio: 'https://audio.example.test/clip.wav' }, extra_info: { audio_length: 2000 } };
+  assert.equal((await fileTasksAdapter.audio(ctx, request)).durationSec, 2);
+});
+
+test('文件任务音色查询合并系统及自定义音色并去重', async (t) => {
+  t.after(() => { globalThis.fetch = originalFetch; });
+  const ctx = { providerId: 'test', providerName: '测试接口', baseUrl: 'https://models.example.test',
+    credentials: { apiKey: 'test-key', groupId: 'test-group' }, timeoutSec: 30,
+    fetchImpl: async (url, init) => {
+      assert.equal(new URL(url).pathname, '/v1/get_voice');
+      assert.equal(new URL(url).searchParams.get('GroupId'), 'test-group');
+      assert.equal(init.headers.Authorization, 'Bearer test-key');
+      assert.deepEqual(JSON.parse(init.body), { voice_type: 'all' });
+      return json({ system_voice: [{ voice_id: 'system-1', voice_name: '沉稳', description: ['清晰'] }],
+        voice_cloning: [{ voice_id: 'custom-1' }], voice_generation: [{ voice_id: 'custom-1' }, {}] });
+    } };
+  globalThis.fetch = ctx.fetchImpl;
+  const voices = await fileTasksAdapter.listVoices(ctx);
+  assert.deepEqual(voices.map((voice) => voice.id), ['system-1', 'custom-1']);
+  assert.equal(voices[0].description, '清晰');
+});
 
 test('Sakura 与通用 OIDC 共用发现、PKCE、令牌与用户信息流程', async () => {
   const kinds = Object.keys(db.OIDC_PRESETS);

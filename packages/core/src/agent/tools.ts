@@ -5,7 +5,19 @@ import type { AgentToolMeta, AgentToolName } from '../types/agent';
  * 真正的执行逻辑在 worker 的 tools 实现中，这里只描述「Agent 能做什么」，
  * 供规划器生成提示词、供前端展示确认弹窗。
  */
+export const VIBE_AGENT_TOOLS = ['agent.ask_user', 'vibe.revise', 'jobs.status', 'finish'] as const;
+
 export const AGENT_TOOLS: AgentToolMeta[] = [
+  {
+    name: 'vibe.revise', label: '调整动画草稿', requiresApproval: false,
+    description: '根据当前脚本和动画代码及用户要求调整草稿，提交后台任务。不会导出最终视频；完成后需用户预览确认。不要在动画任务执行期间重复提交。',
+    argsSchema: { instructions: 'string 必填，具体调整要求（画面、字幕、节奏、旁白等）' },
+  },
+  {
+    name: 'jobs.status', label: '查看实时任务进度', requiresApproval: false,
+    description: '查询当前项目最近任务与全部活动任务的状态、阶段、百分比和最新日志。只读，不等待任务完成。',
+    argsSchema: {},
+  },
   {
     name: 'agent.ask_user',
     label: '向用户提问',
@@ -199,8 +211,8 @@ export function isKnownTool(name: string): name is AgentToolName {
 }
 
 /** 生成给规划器看的工具清单文本 */
-export function buildToolCatalog(): string {
-  return AGENT_TOOLS.map((tool) => {
+export function buildToolCatalog(allowed?: readonly string[]): string {
+  return AGENT_TOOLS.filter((tool) => !allowed || allowed.includes(tool.name)).map((tool) => {
     const args = Object.entries(tool.argsSchema)
       .map(([key, desc]) => `      - ${key}: ${desc}`)
       .join('\n');

@@ -70,7 +70,7 @@ export function NewProjectForm() {
       </div>
       {mode === 'vibe' ? (
         <p className="mb-4 text-xs leading-5 text-slate-400">
-          输入主题，AI 依次生成脚本、动画代码，再渲染无声 MP4（含字幕）。需配置文本模型。
+          输入主题，AI 先生成可预览的动画草稿；可与 Agent 沟通调整，确认后再导出 MP4，可选旁白配音。需配置文本模型，配音需语音模型。
         </p>
       ) : (
         <p className="mb-5 text-xs leading-5 text-slate-400">给作品起个名字，建立你的创作空间。</p>
@@ -149,7 +149,7 @@ export function NewProjectForm() {
       </div>
       {error ? <div className="mb-2 text-[11px] text-red-300">{error}</div> : null}
       <Button variant="primary" className="mt-2 w-full" loading={busy} onClick={() => void create()}>
-        {mode === 'vibe' ? '创建并生成视频' : '创建并进入工作台'}
+        {mode === 'vibe' ? '创建并生成动画草稿' : '创建并进入工作台'}
       </Button>
     </Card>
   );

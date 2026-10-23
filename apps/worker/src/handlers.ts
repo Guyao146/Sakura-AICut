@@ -379,5 +379,6 @@ export const HANDLERS: Record<string, Handler> = {
   'qa.review': handleQaReview,
   'vibe.generate': handleVibeJob,
   'vibe.code': handleVibeJob,
+  'vibe.revise': handleVibeJob,
   'vibe.render': handleVibeJob,
 };
