@@ -44,6 +44,20 @@ docker compose up -d
 
 > 首次使用请先设置本地管理员密码，再到 **设置 → API 接入** 选择协议模板，填写接口地址、凭证与实际模型 ID。登录可选接入 Sakura 账号或通用 OIDC。
 
+### 域名部署与登录回调
+
+通过域名部署时，在 `.env` 中设置 `APP_URL=https://cut.example.com`，替换为浏览器实际访问的 AICut 根网址，然后执行 `docker compose up -d web` 使环境变量生效。认证服务的 Issuer 在登录接入设置中单独填写，两者分别指向 AICut 与认证服务。
+
+`APP_URL` 留空时，登录回调和页面跳转依次使用 `X-Forwarded-Host` / `Host` 与 `X-Forwarded-Proto` 解析对外地址。反向代理应覆盖这些请求头，例如：
+
+```nginx
+proxy_set_header Host $host;
+proxy_set_header X-Forwarded-Host $host;
+proxy_set_header X-Forwarded-Proto $scheme;
+```
+
+容器的 `HOSTNAME=0.0.0.0` 用于监听所有网络接口，应保持该值；`APP_URL` 则用于生成浏览器地址，不能使用 `0.0.0.0`。若登录后跳到 `https://0.0.0.0:3000/`，请升级包含此修复的 Web 镜像，确认 `APP_URL` 正确并重新创建 Web 容器。仅重启容器不会更新环境变量。
+
 ### 网关快捷接入
 
 在 **设置 → API 接入 → 网关快捷接入** 填写已部署的网关网址与**本地调用 Key**，点击「验证并拉取配置」。网关需支持 `POST /api/integration/verify` 和 `GET /api/integration/config`（Sakura 网关 2.8.0 及后续兼容版本）。

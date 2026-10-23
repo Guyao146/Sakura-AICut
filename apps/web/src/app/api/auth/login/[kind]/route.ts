@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { buildAuthorizeRequest, buildRedirectUri } from '@/lib/server/oidc';
+import { publicBaseUrl } from '@/lib/public-url';
 import { OIDC_PRESETS } from '@sakura/db';
 import type { OidcProviderKind } from '@sakura/db';
 
@@ -10,14 +11,6 @@ import type { OidcProviderKind } from '@sakura/db';
 export const dynamic = 'force-dynamic';
 
 const VALID_KINDS = new Set<OidcProviderKind>(['sakura', 'authentik']);
-
-function publicBaseUrl(request: NextRequest): string {
-  // 优先信任反代设置的对外地址，其次取请求本身的 origin
-  const forwardedProto = request.headers.get('x-forwarded-proto');
-  const forwardedHost = request.headers.get('x-forwarded-host');
-  if (forwardedHost) return `${forwardedProto ?? 'http'}://${forwardedHost}`;
-  return new URL(request.url).origin;
-}
 
 export async function GET(
   request: NextRequest,

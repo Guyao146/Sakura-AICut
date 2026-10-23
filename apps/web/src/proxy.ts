@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { SESSION_COOKIE, verifySessionToken } from '@/lib/session';
+import { publicUrl } from '@/lib/public-url';
 
 /**
  * 全局登录守卫（Next.js 16 的 proxy 约定，替代旧 middleware 文件名）
@@ -29,8 +30,7 @@ export function proxy(request: NextRequest) {
   if (pathname.startsWith('/api/')) {
     return NextResponse.json({ ok: false, error: '未登录或会话已过期' }, { status: 401 });
   }
-  const loginUrl = request.nextUrl.clone();
-  loginUrl.pathname = '/login';
+  const loginUrl = publicUrl('/login', request);
   loginUrl.searchParams.set('from', pathname);
   return NextResponse.redirect(loginUrl);
 }

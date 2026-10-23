@@ -23,7 +23,8 @@ services:
       # 供应商凭证加密密钥。留空时会自动使用数据目录内的持久化随机密钥（安全默认）；
       # 多实例共享同一份数据卷时必须显式设置为同一个值。
       SAKURA_SECRET: ${SAKURA_SECRET:-}
-      APP_URL: ${APP_URL:-http://localhost:3000}
+      # 设置为浏览器实际访问的本站根网址；留空时从反代请求头解析
+      APP_URL: ${APP_URL:-}
       FFMPEG_PATH: ffmpeg
       NODE_ENV: production
     volumes:

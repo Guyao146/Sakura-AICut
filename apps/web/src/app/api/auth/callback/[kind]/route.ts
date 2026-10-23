@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto';
 import { recordSession, OIDC_PRESETS } from '@sakura/db';
 import { buildRedirectUri, exchangeCode, fetchUserInfo, parseState } from '@/lib/server/oidc';
 import { createSessionToken, SESSION_COOKIE, sessionCookieOptions } from '@/lib/session';
+import { publicBaseUrl, publicUrl } from '@/lib/public-url';
 import type { OidcProviderKind } from '@sakura/db';
 
 /**
@@ -14,13 +15,6 @@ import type { OidcProviderKind } from '@sakura/db';
 export const dynamic = 'force-dynamic';
 
 const VALID_KINDS = new Set<OidcProviderKind>(['sakura', 'authentik']);
-
-function publicBaseUrl(request: NextRequest): string {
-  const forwardedProto = request.headers.get('x-forwarded-proto');
-  const forwardedHost = request.headers.get('x-forwarded-host');
-  if (forwardedHost) return `${forwardedProto ?? 'http'}://${forwardedHost}`;
-  return new URL(request.url).origin;
-}
 
 export async function GET(
   request: NextRequest,
@@ -73,7 +67,7 @@ export async function GET(
       console.error('[auth] 记录 OIDC 会话失败：', error);
     }
 
-    return NextResponse.redirect(new URL(parsed.from, request.url));
+    return NextResponse.redirect(publicUrl(parsed.from, request));
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error(`[auth] ${providerKind} 登录失败：`, message);
@@ -82,7 +76,7 @@ export async function GET(
 }
 
 function redirectToLogin(request: NextRequest, reason: string): NextResponse {
-  const url = new URL('/login', request.url);
+  const url = publicUrl('/login', request);
   url.searchParams.set('error', reason);
   return NextResponse.redirect(url);
 }

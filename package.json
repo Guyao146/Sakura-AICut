@@ -1,6 +1,6 @@
 {
   "name": "sakura-aicut",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "private": true,
   "description": "Sakura AI Cut - 无限画布 AI 短剧 / 电影生成与剪辑平台",
   "license": "SEE LICENSE IN LICENSE",
@@ -16,7 +16,7 @@
     "start:web": "pnpm --filter @sakura/web start",
     "start:worker": "pnpm --filter @sakura/worker start",
     "typecheck": "pnpm -r typecheck",
-    "test": "tsx --tsconfig apps/web/tsconfig.json --test apps/web/src/components/layout.test.ts packages/core/src/utils/jobs.test.ts apps/web/src/components/studio/canvas-state.test.ts apps/web/src/components/studio/CanvasInspector.test.ts packages/pipeline/src/qa.test.ts scripts/studio-jobs.test.mjs scripts/check-brands.test.mjs scripts/neutral-integrations.test.mjs scripts/gateway-integration.test.mjs scripts/ecosystem.test.mjs scripts/vibe-integration.test.mjs scripts/vibe-preview.test.mjs",
+    "test": "tsx --tsconfig apps/web/tsconfig.json --test apps/web/src/components/layout.test.ts packages/core/src/utils/jobs.test.ts apps/web/src/components/studio/canvas-state.test.ts apps/web/src/components/studio/CanvasInspector.test.ts packages/pipeline/src/qa.test.ts scripts/studio-jobs.test.mjs scripts/check-brands.test.mjs scripts/neutral-integrations.test.mjs scripts/auth-redirect.test.mjs scripts/gateway-integration.test.mjs scripts/ecosystem.test.mjs scripts/vibe-integration.test.mjs scripts/vibe-preview.test.mjs",
     "test:vibe:ui": "tsx --tsconfig apps/web/tsconfig.json scripts/vibe-ui.mjs",
     "test:vibe:live": "node scripts/test-vibe-live.mjs",
     "check:brands": "node scripts/check-brands.mjs",
